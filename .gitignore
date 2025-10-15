@@ -1,0 +1,66 @@
+# Flowscribe .gitignore
+Archive/*
+
+# Cloned repositories (too large to commit)
+projects/*/
+
+# Keep the directory structure
+!projects/.gitkeep
+
+# Generated outputs (exclude by default)
+output/*/
+
+# EXCEPT: Include example documentation
+!output/ojs/
+!output/examples/
+
+# Include markdown and DSL, exclude binaries
+!output/**/*.md
+!output/**/*.dsl
+output/**/*.png
+output/**/*.json
+output/**/*.dot
+
+# Docker volumes
+.docker/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+ENV/
+.env
+!.env.example
+
+# Node
+node_modules/
+npm-debug.log
+yarn-error.log
+
+# PHP
+/vendor/
+composer.lock
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Temp files
+*.tmp
+*.temp
+
+# Keep example outputs for reference
+!output/examples/

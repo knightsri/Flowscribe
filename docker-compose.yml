@@ -1,0 +1,25 @@
+#version: '3.8'
+
+services:
+  flowscribe:
+    build: .
+    container_name: flowscribe
+    volumes:
+      # Mount your repo root
+      - ./:/workspace
+    environment:
+      # Pass from .env file or host environment
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+      - OPENROUTER_MODEL=${OPENROUTER_MODEL:-anthropic/claude-sonnet-4-20250514}
+      # Optional: Custom Model Pricing (per 1M tokens)
+      # Override if using negotiated rates or custom models
+      - OPENROUTER_MODEL_INPUT_COST_PER_1M=${OPENROUTER_MODEL_INPUT_COST_PER_1M:-}
+      - OPENROUTER_MODEL_OUTPUT_COST_PER_1M=${OPENROUTER_MODEL_OUTPUT_COST_PER_1M:-}
+      # Optional: Unified pricing (if input/output costs are same)
+      #- OPENROUTER_MODEL_COST_PER_1M=${OPENROUTER_MODEL_COST_PER_1M:-}
+    env_file:
+      - .env
+    working_dir: /workspace
+    stdin_open: true
+    tty: true
+    command: /bin/bash
