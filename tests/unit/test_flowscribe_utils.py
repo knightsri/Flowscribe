@@ -9,6 +9,7 @@ import sys
 
 # Import the module under test
 import flowscribe_utils
+from constants import MAX_RESPONSE_SIZE
 
 
 class TestCostTracker:
@@ -35,14 +36,13 @@ class TestCostTracker:
         assert tracker.pricing['output'] == 15.0
         assert tracker.pricing['source'] == 'built-in'
 
-    def test_get_model_pricing_unknown_model(self, capsys):
+    def test_get_model_pricing_unknown_model(self, caplog):
         """Test pricing retrieval for unknown models."""
         tracker = flowscribe_utils.CostTracker('unknown/model')
         assert tracker.pricing['input'] == 3.0
         assert tracker.pricing['output'] == 15.0
         assert tracker.pricing['source'] == 'default'
-        captured = capsys.readouterr()
-        assert 'Warning' in captured.out
+        assert 'Unknown model pricing' in caplog.text
 
     def test_get_model_pricing_from_env(self, monkeypatch):
         """Test pricing retrieval from environment variables."""
@@ -157,7 +157,7 @@ class TestLLMClient:
         assert result['id'] == 'test-id-123'
 
     @patch('flowscribe_utils.requests.post')
-    def test_call_timeout(self, mock_post, capsys):
+    def test_call_timeout(self, mock_post, caplog):
         """Test API call timeout."""
         import requests
         mock_post.side_effect = requests.exceptions.Timeout()
@@ -166,11 +166,10 @@ class TestLLMClient:
         result = client.call('Test prompt', timeout=1)
 
         assert result is None
-        captured = capsys.readouterr()
-        assert 'timed out' in captured.out
+        assert 'timed out' in caplog.text
 
     @patch('flowscribe_utils.requests.post')
-    def test_call_request_error(self, mock_post, capsys):
+    def test_call_request_error(self, mock_post, caplog):
         """Test API call with request error."""
         import requests
         mock_post.side_effect = requests.exceptions.RequestException('Network error')
@@ -179,13 +178,12 @@ class TestLLMClient:
         result = client.call('Test prompt')
 
         assert result is None
-        captured = capsys.readouterr()
-        assert 'failed' in captured.out
+        assert 'failed' in caplog.text
 
     @patch('flowscribe_utils.requests.post')
-    def test_call_response_size_limit(self, mock_post, capsys):
+    def test_call_response_size_limit(self, mock_post, caplog):
         """Test API call with response size limit."""
-        large_content = 'x' * (flowscribe_utils.LLMClient.MAX_RESPONSE_SIZE + 1000)
+        large_content = 'x' * (MAX_RESPONSE_SIZE + 1000)
         mock_response = Mock()
         mock_response.json.return_value = {
             'choices': [{'message': {'content': large_content}}],
@@ -197,9 +195,8 @@ class TestLLMClient:
         client = flowscribe_utils.LLMClient('test-key', 'test/model')
         result = client.call('Test prompt')
 
-        assert len(result['content']) == flowscribe_utils.LLMClient.MAX_RESPONSE_SIZE
-        captured = capsys.readouterr()
-        assert 'truncated' in captured.out
+        assert len(result['content']) == MAX_RESPONSE_SIZE
+        assert 'truncated' in caplog.text
 
 
 class TestUtilityFunctions:
@@ -223,13 +220,12 @@ class TestUtilityFunctions:
         result = flowscribe_utils.parse_llm_json(json_str)
         assert result == {"key": "value"}
 
-    def test_parse_llm_json_invalid(self, capsys):
+    def test_parse_llm_json_invalid(self, caplog):
         """Test parsing invalid JSON."""
         json_str = '{"key": invalid}'
         result = flowscribe_utils.parse_llm_json(json_str)
         assert result is None
-        captured = capsys.readouterr()
-        assert 'Failed to parse JSON' in captured.out
+        assert 'Failed to parse JSON' in caplog.text
 
     def test_get_api_config_success(self, monkeypatch):
         """Test getting API config from environment."""

@@ -388,7 +388,7 @@ def mermaid_safe_id(name: str) -> str:
     - only [A-Za-z0-9_]
     - prefix with 'n_' if starts with a digit or becomes empty
     """
-    base = _re.sub(r'[^A-Za-z0-9_]', '_', str(name or ''))
+    base = re.sub(r'[^A-Za-z0-9_]', '_', str(name or ''))
     if not base or base[0].isdigit():
         base = 'n_' + base
     return base
@@ -405,7 +405,7 @@ class MermaidIdRegistry:
     def uid(self, name: str) -> str:
         sid = mermaid_safe_id(name)
         if sid in self._used:
-            h = _hashlib.md5(str(name).encode('utf-8')).hexdigest()[:6]
+            h = hashlib.md5(str(name).encode('utf-8')).hexdigest()[:6]
             sid = f"{sid}_{h}"
         self._used.add(sid)
         return sid
