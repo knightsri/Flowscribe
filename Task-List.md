@@ -12,6 +12,7 @@
 - None (ready to start next task)
 
 **Next Up:**
+- [ ] **SEC-VERIFY: Verify Security Fixes** (Testing completed security work)
 - [ ] **TEST-001: Set Up Testing Framework**
 - [ ] **TEST-002: Install and Configure pytest**
 
@@ -85,6 +86,29 @@
 
 **Estimated Effort:** 3-5 days
 
+### Security Verification
+
+- [ ] **SEC-VERIFY: Verify Security Fixes**
+  - **Action:** Test and verify all completed security fixes
+  - **Test Cases:**
+    - SEC-001: Test subprocess calls don't use shell=True
+    - SEC-002: Verify RestrictedPython is in use for LLM-generated code
+    - SEC-003: Test URL validation rejects invalid/malicious URLs
+  - **Verification Steps:**
+    ```bash
+    # Test 1: Search for any remaining shell=True usage
+    grep -r "shell=True" scripts/
+
+    # Test 2: Verify RestrictedPython import exists
+    grep -r "RestrictedPython" scripts/
+
+    # Test 3: Test URL validation function
+    python3 -c "from scripts.flowscribe_utils import validate_github_url; \
+                validate_github_url('https://github.com/valid/repo')"
+    ```
+  - **Create:** Manual test cases document
+  - **Priority:** ⚠️ HIGH
+
 ### Testing Infrastructure
 
 - [ ] **TEST-001: Set Up Testing Framework**
@@ -135,6 +159,26 @@
     - Context initialization and validation
   - **Priority:** ⚠️ HIGH
 
+- [ ] **TEST-004-VERIFY: Run and Validate All Tests**
+  - **Action:** Execute test suite and verify coverage
+  - **Verification Steps:**
+    ```bash
+    # Run all tests with coverage
+    pytest tests/ -v --cov=scripts --cov-report=term-missing
+
+    # Verify coverage is ≥80%
+    pytest tests/ --cov=scripts --cov-fail-under=80
+
+    # Run specific test categories
+    pytest tests/unit/ -v
+    pytest tests/integration/ -v
+    ```
+  - **Success Criteria:**
+    - All tests pass
+    - Code coverage ≥80%
+    - No test warnings or errors
+  - **Priority:** ⚠️ HIGH
+
 - [ ] **TEST-005: Add CI/CD Pipeline**
   - **Action:** Create `.github/workflows/ci.yml`
   - **Jobs:**
@@ -142,6 +186,27 @@
     - Unit tests
     - Integration tests (with mocked LLM)
     - Security scanning (bandit)
+  - **Priority:** ⚠️ HIGH
+
+- [ ] **TEST-005-VERIFY: Verify CI/CD Pipeline**
+  - **Action:** Test CI/CD pipeline is working correctly
+  - **Verification Steps:**
+    ```bash
+    # Create a test branch and push to trigger CI
+    git checkout -b test/ci-verification
+    echo "# CI Test" >> README.md
+    git add README.md
+    git commit -m "Test CI pipeline"
+    git push origin test/ci-verification
+
+    # Check GitHub Actions UI for results
+    # Verify all jobs pass: linting, tests, security scanning
+    ```
+  - **Success Criteria:**
+    - All CI jobs complete successfully
+    - Linting passes with no errors
+    - All tests pass
+    - Security scan completes with no critical issues
   - **Priority:** ⚠️ HIGH
 
 ### Dependencies & Environment
@@ -210,6 +275,36 @@
     - Keep `composer.lock` (PHP)
   - **Priority:** ⚠️ HIGH
 
+- [ ] **DEP-VERIFY: Verify Dependencies Installation**
+  - **Action:** Test all dependencies are correctly installed and working
+  - **Verification Steps:**
+    ```bash
+    # Test Python dependencies
+    pip install -r requirements.txt
+    pip install -r requirements-dev.txt
+    python3 -c "import yaml, requests; print('Python deps OK')"
+
+    # Test npm packages
+    madge --version
+    dependency-cruiser --version
+    mmdc --version
+
+    # Verify lock files exist
+    test -f package-lock.json && echo "npm lock file exists"
+
+    # Run a simple import test for all major modules
+    python3 -c "
+    from scripts.flowscribe_utils import FlowscribeContext, CostTracker
+    print('All Python imports successful')
+    "
+    ```
+  - **Success Criteria:**
+    - All dependencies install without errors
+    - Version checks return expected versions
+    - Lock files are committed
+    - No dependency conflicts
+  - **Priority:** ⚠️ HIGH
+
 ### Logging & Observability
 
 - [ ] **LOG-001: Replace print() with logging Module**
@@ -265,6 +360,30 @@
     ```
   - **Priority:** ⚠️ HIGH
 
+- [ ] **LOG-VERIFY: Verify Logging Implementation**
+  - **Action:** Test logging is working correctly across all scripts
+  - **Verification Steps:**
+    ```bash
+    # Test logger module exists
+    test -f scripts/logger.py && echo "Logger module exists"
+
+    # Verify no print() statements remain (except in specific cases)
+    ! grep -r "print(" scripts/*.py | grep -v "# print" | grep -v "__name__"
+
+    # Test debug mode on a sample script
+    python3 scripts/flowscribe-analyze.py --help | grep -q "debug"
+
+    # Run a script and verify logging output format
+    # Should see timestamps and log levels
+    python3 scripts/flowscribe-analyze.py --debug 2>&1 | head -5
+    ```
+  - **Success Criteria:**
+    - Logger module exists and imports correctly
+    - All print() replaced with logger calls (except special cases)
+    - Debug flag available in all main scripts
+    - Log output shows proper formatting with timestamps and levels
+  - **Priority:** ⚠️ HIGH
+
 ---
 
 ## 💡 MEDIUM PRIORITY (Technical Debt)
@@ -312,6 +431,28 @@
         # ...
     ```
   - **Tools:** Use mypy for type checking
+  - **Priority:** 💡 MEDIUM
+
+- [ ] **CODE-003-VERIFY: Verify Type Hints with mypy**
+  - **Action:** Run mypy type checker on all Python files
+  - **Verification Steps:**
+    ```bash
+    # Install mypy if not already installed
+    pip install mypy==1.7.1
+
+    # Run mypy on all scripts
+    mypy scripts/*.py --strict
+
+    # Check for type coverage
+    mypy scripts/*.py --strict --html-report mypy-report
+
+    # Verify key functions have type hints
+    grep -A 5 "^def " scripts/flowscribe_utils.py | grep -E "(->|:.*=)"
+    ```
+  - **Success Criteria:**
+    - mypy runs with no errors in strict mode
+    - All public functions have complete type hints
+    - Type coverage ≥90%
   - **Priority:** 💡 MEDIUM
 
 - [ ] **CODE-004: Fix Generic Exception Handling**
@@ -411,6 +552,36 @@
     ```
   - **Priority:** 💡 MEDIUM
 
+- [ ] **SEC-VERIFY-2: Verify Additional Security Improvements**
+  - **Action:** Test security improvements (SEC-004, SEC-005, SEC-006)
+  - **Verification Steps:**
+    ```bash
+    # Test 1: Verify no --api-key argument in scripts
+    ! grep -r "add_argument.*--api-key" scripts/
+
+    # Test 2: Verify error message sanitization
+    python3 -c "
+    from scripts.flowscribe_utils import sanitize_error_message
+    msg = sanitize_error_message(Exception('/workspace/secret/file.py'))
+    assert '/workspace' not in msg
+    print('Error sanitization OK')
+    "
+
+    # Test 3: Verify configuration validation exists
+    test -f scripts/config_validator.py && echo "Config validator exists"
+    python3 -c "
+    from scripts.config_validator import validate_api_key, validate_model_name
+    assert validate_api_key('sk-or-v1-abcdef123456789012345')
+    assert validate_model_name('anthropic/claude-sonnet-4')
+    print('Config validation OK')
+    "
+    ```
+  - **Success Criteria:**
+    - No CLI arguments accept API keys
+    - Error messages are properly sanitized
+    - Configuration validation functions work correctly
+  - **Priority:** 💡 MEDIUM
+
 ### Documentation
 
 - [ ] **DOC-001: Add LICENSE File**
@@ -488,6 +659,48 @@
                 raise ValueError("API key required")
             # ... more validation
     ```
+  - **Priority:** 💡 MEDIUM
+
+- [ ] **CONF-VERIFY: Verify Configuration System**
+  - **Action:** Test configuration schema and model constants
+  - **Verification Steps:**
+    ```bash
+    # Test models.py exists and imports correctly
+    test -f scripts/models.py && echo "Models file exists"
+    python3 -c "
+    from scripts.models import LLMModel
+    assert LLMModel.CLAUDE_SONNET_4.value.startswith('anthropic/')
+    print('Models enum OK')
+    "
+
+    # Test config schema exists and validates
+    test -f scripts/config_schema.py && echo "Config schema exists"
+    python3 -c "
+    from scripts.config_schema import FlowscribeConfig
+    from pathlib import Path
+
+    # Test valid config
+    config = FlowscribeConfig(
+        api_key='sk-or-v1-test123',
+        model='anthropic/claude-sonnet-4',
+        workspace=Path('/tmp')
+    )
+    config.validate()
+    print('Config schema OK')
+
+    # Test invalid config raises error
+    try:
+        bad_config = FlowscribeConfig(api_key='', model='test', workspace=Path('/tmp'))
+        bad_config.validate()
+        assert False, 'Should have raised error'
+    except ValueError:
+        print('Config validation works')
+    "
+    ```
+  - **Success Criteria:**
+    - Model constants file exists and contains all required models
+    - Config schema validates correct configurations
+    - Config schema rejects invalid configurations
   - **Priority:** 💡 MEDIUM
 
 ---
@@ -636,6 +849,38 @@
     ```
   - **Priority:** 🌟 LOW
 
+- [ ] **DOCK-VERIFY: Verify Docker Improvements**
+  - **Action:** Test Docker image builds and runs correctly
+  - **Verification Steps:**
+    ```bash
+    # Build the Docker image
+    docker build -t flowscribe:test .
+
+    # Check image size
+    docker images flowscribe:test --format "{{.Size}}"
+
+    # Run container and verify health check
+    docker run -d --name flowscribe-test flowscribe:test
+    sleep 35  # Wait for health check
+    docker inspect flowscribe-test --format='{{.State.Health.Status}}'
+
+    # Test container can execute scripts
+    docker exec flowscribe-test python3 -c "
+    from scripts.flowscribe_utils import FlowscribeContext
+    print('Container scripts OK')
+    "
+
+    # Cleanup
+    docker stop flowscribe-test
+    docker rm flowscribe-test
+    ```
+  - **Success Criteria:**
+    - Docker image builds without errors
+    - Image size is reasonable (check if Alpine saves space)
+    - Health check passes
+    - Scripts execute correctly in container
+  - **Priority:** 🌟 LOW
+
 ### Git & Version Control
 
 - [ ] **GIT-001: Set Up Branch Protection**
@@ -676,23 +921,35 @@
 ## 📊 Progress Tracking
 
 ### Overall Progress
-- **Total Tasks:** 73
+- **Total Tasks:** 82 (includes verification tasks)
 - **Completed:** 3 ✅
 - **In Progress:** 0
-- **Not Started:** 70
+- **Not Started:** 79
 
 ### By Priority
 - 🚨 **CRITICAL:** ~~3 tasks~~ → **All completed!** ✅
-- ⚠️ **HIGH:** 13 tasks (3-5 days) - **Next focus area**
-- 💡 **MEDIUM:** 28 tasks (1-2 weeks)
-- 🌟 **LOW:** 29 tasks (as time permits)
+- ⚠️ **HIGH:** 18 tasks (4-6 days) - **Next focus area** (includes 5 verification tasks)
+- 💡 **MEDIUM:** 31 tasks (1-2 weeks) (includes 3 verification tasks)
+- 🌟 **LOW:** 30 tasks (as time permits) (includes 1 verification task)
 
 ### Completion Rate
 - **Critical Priority:** 100% (3/3) ✅
-- **High Priority:** 0% (0/13)
-- **Medium Priority:** 0% (0/28)
-- **Low Priority:** 0% (0/29)
-- **Overall:** 4.1% (3/73)
+- **High Priority:** 0% (0/18)
+- **Medium Priority:** 0% (0/31)
+- **Low Priority:** 0% (0/30)
+- **Overall:** 3.7% (3/82)
+
+### Verification Tasks Added
+To ensure quality, 9 verification tasks have been added:
+- **SEC-VERIFY**: Verify completed security fixes
+- **TEST-004-VERIFY**: Run and validate all tests
+- **TEST-005-VERIFY**: Verify CI/CD pipeline
+- **DEP-VERIFY**: Verify dependencies installation
+- **LOG-VERIFY**: Verify logging implementation
+- **CODE-003-VERIFY**: Verify type hints with mypy
+- **SEC-VERIFY-2**: Verify additional security improvements
+- **CONF-VERIFY**: Verify configuration system
+- **DOCK-VERIFY**: Verify Docker improvements
 
 ### Recommended Workflow
 
@@ -706,11 +963,13 @@
 ## 📝 Notes
 
 - This task list is based on the Deep Code Review completed on 2025-11-14
+- **2025-11-15 Update:** Added verification/testing tasks after major implementation tasks
 - Priorities may change based on business requirements
 - Estimated efforts are approximate and may vary
 - Each task should be completed in a separate branch/PR for easier review
 - Update checkboxes as tasks are completed
 - Add notes and blockers in task descriptions as needed
+- **Testing Philosophy:** Every major implementation task now has a corresponding verification task
 
 ---
 
