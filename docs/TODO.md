@@ -1,6 +1,6 @@
 # Flowscribe Project TODO
 
-_Last updated: 2025-10-15 04:27_
+_Last updated: 2025-11-15 06:15_
 
 ## 🚀 Active Work Items
 
@@ -19,6 +19,13 @@ _Last updated: 2025-10-15 04:27_
 ### Metrics & Validation
 - [x] Cost rollup (usage-first accounting)
 - [ ] Provenance chain hashing for audit logs
+
+### Security & Hardening
+- [x] Command injection prevention (subprocess security)
+- [x] Path traversal protection (input validation)
+- [x] GitHub URL validation with security checks
+- [x] Security documentation (SECURITY.md)
+- [x] MIT License added
 
 ## 🧩 Backlog
 - [ ] Add other language analyzers
