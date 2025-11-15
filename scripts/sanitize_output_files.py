@@ -191,9 +191,15 @@ def ensure_front_matter(files: List[Path]) -> int:
     return changed
 
 def sanitize_output_dir(output_dir: str, recursive: bool = True, to_div: bool = False) -> dict:
-    od = Path(output_dir)
+    od = Path(output_dir).resolve()  # Resolve to absolute path
+
+    # Security: Prevent directory traversal attacks
     if not od.exists():
         raise FileNotFoundError(output_dir)
+
+    # Security: Ensure path is absolute and doesn't contain parent directory references
+    if '..' in od.parts:
+        raise ValueError(f"Invalid path: directory traversal detected in {output_dir}")
 
     files = find_markdown_files(od, recursive=recursive)
     if not files:

@@ -253,11 +253,18 @@ deptrac:
 class FlowscribeAnalyzer:
     def __init__(self, github_url, workspace_dir, output_base_dir, api_key, model):
         self.github_url = github_url
-        self.workspace_dir = Path(workspace_dir)
-        self.output_base_dir = Path(output_base_dir)
+
+        # Security: Resolve paths and validate against directory traversal
+        self.workspace_dir = Path(workspace_dir).resolve()
+        self.output_base_dir = Path(output_base_dir).resolve()
+
+        # Security: Ensure paths don't contain parent directory references
+        if '..' in Path(workspace_dir).parts or '..' in Path(output_base_dir).parts:
+            raise ValueError("Invalid path: directory traversal detected")
+
         self.api_key = api_key
         self.model = model
-        
+
         # Parse GitHub URL
         self.repo_owner, self.repo_name = self.parse_github_url(github_url)
         self.project_dir = self.workspace_dir / self.repo_name
@@ -286,25 +293,53 @@ class FlowscribeAnalyzer:
         self.project_domain = None
     
     def parse_github_url(self, url):
-        """Parse GitHub URL to extract owner and repo name"""
+        """Parse GitHub URL to extract owner and repo name
+
+        Args:
+            url: GitHub repository URL
+
+        Returns:
+            Tuple of (owner, repo_name)
+
+        Raises:
+            ValueError: If URL is invalid or contains suspicious characters
+        """
+        # Security: Validate input to prevent injection attacks
+        if not isinstance(url, str) or not url:
+            raise ValueError("GitHub URL must be a non-empty string")
+
+        # Security: Check for suspicious characters that could indicate injection attempts
+        suspicious_chars = [';', '&', '|', '`', '$', '\n', '\r']
+        if any(char in url for char in suspicious_chars):
+            raise ValueError(f"Invalid GitHub URL: contains suspicious characters")
+
         # Remove .git suffix if present
         url = url.rstrip('/')
         if url.endswith('.git'):
             url = url[:-4]
-        
+
         # Extract owner and repo
         # Supports: https://github.com/owner/repo or git@github.com:owner/repo
         patterns = [
             r'github\.com[:/]([^/]+)/([^/]+)$',
             r'github\.com[:/]([^/]+)/([^/]+)\.git$'
         ]
-        
+
         for pattern in patterns:
             match = re.search(pattern, url)
             if match:
-                return match.group(1), match.group(2)
-        
-        raise ValueError(f"Invalid GitHub URL: {url}")
+                owner, repo = match.group(1), match.group(2)
+
+                # Security: Validate owner and repo names
+                # GitHub usernames/orgs and repo names can only contain alphanumeric, hyphens, underscores, and dots
+                if not re.match(r'^[a-zA-Z0-9._-]+$', owner):
+                    raise ValueError(f"Invalid GitHub owner name: {owner}")
+                if not re.match(r'^[a-zA-Z0-9._-]+$', repo):
+                    raise ValueError(f"Invalid GitHub repository name: {repo}")
+
+                return owner, repo
+
+        raise ValueError(f"Invalid GitHub URL format: {url}")
     
     def print_header(self, text):
         """Print a formatted header"""
@@ -318,12 +353,21 @@ class FlowscribeAnalyzer:
         print(f"[Step {step_num}/{total_steps}] {text}")
         print('-' * 70)
     
-    def run_command(self, cmd, cwd=None, capture_output=True):
-        """Run a shell command and return output"""
+    def run_command(self, cmd_list, cwd=None, capture_output=True):
+        """Run a command and return output
+
+        Args:
+            cmd_list: List of command arguments (e.g., ['deptrac', 'analyze', '--config-file=...'])
+            cwd: Working directory for command execution
+            capture_output: Whether to capture stdout/stderr
+
+        Returns:
+            Tuple of (success: bool, stdout: str, stderr: str)
+        """
         try:
             result = subprocess.run(
-                cmd,
-                shell=True,
+                cmd_list,
+                shell=False,  # Security: Never use shell=True to prevent command injection
                 cwd=cwd,
                 capture_output=capture_output,
                 text=True,
@@ -524,13 +568,19 @@ Provide ONLY the JSON, no other text."""
     def run_deptrac_analysis(self):
         """Run deptrac analysis"""
         print("Running deptrac dependency analysis...")
-        
+
         deptrac_output = self.output_dir / 'deptrac-report.json'
         deptrac_config = self.project_dir / 'deptrac.yaml'
-        
-        # Explicitly specify config file path
-        cmd = f"deptrac analyze --config-file={deptrac_config} --formatter=json --output={deptrac_output}"
-        success, stdout, stderr = self.run_command(cmd, cwd=self.project_dir)
+
+        # Build command as list to prevent command injection
+        cmd_list = [
+            'deptrac',
+            'analyze',
+            f'--config-file={deptrac_config}',
+            '--formatter=json',
+            f'--output={deptrac_output}'
+        ]
+        success, stdout, stderr = self.run_command(cmd_list, cwd=self.project_dir)
         
         # Deptrac returns non-zero exit code when violations exist
         # So check if output file exists instead of just exit code
