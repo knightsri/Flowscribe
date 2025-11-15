@@ -11,7 +11,6 @@ import sys
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Tuple
 from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor
-import shlex
 
 
 class AsyncC4Generator:
