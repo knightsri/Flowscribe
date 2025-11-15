@@ -6,7 +6,6 @@ multiple C4 diagrams concurrently to improve overall performance.
 """
 
 import asyncio
-import subprocess
 import sys
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Tuple
