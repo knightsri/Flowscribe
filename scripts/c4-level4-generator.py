@@ -36,9 +36,17 @@ def load_deptrac_report(deptrac_json_path):
 
 
 def scan_codebase_structure(project_dir):
-    """Scan the codebase to find PHP files and their basic structure"""
+    """Scan the codebase to find PHP files and their basic structure
+
+    Args:
+        project_dir: Path to project directory (validated for security)
+
+    Returns:
+        List of PHP file metadata dictionaries
+    """
     php_files = []
-    project_path = Path(project_dir)
+    # Security: Use resolved absolute path (already validated in main)
+    project_path = Path(project_dir).resolve()
     
     # Try to read directories from deptrac.yaml
     search_dirs = []
@@ -174,8 +182,17 @@ Provide ONLY the JSON response, no additional text.
 
 
 def read_component_code(project_dir, file_path):
-    """Read the actual PHP code for a component"""
-    full_path = Path(project_dir) / file_path
+    """Read the actual PHP code for a component
+
+    Args:
+        project_dir: Path to project directory (validated for security)
+        file_path: Relative path to component file
+
+    Returns:
+        String content of the file or None if not found
+    """
+    # Security: Use resolved absolute paths (already validated in main)
+    full_path = Path(project_dir).resolve() / file_path
     
     if not full_path.exists():
         return None
@@ -609,20 +626,48 @@ def main():
     )
     
     args = parser.parse_args()
-    
-    # Validate
+
+    # Validate API key
     if not args.api_key:
         print("✗ Error: OpenRouter API key required")
         print("Set OPENROUTER_API_KEY environment variable or use --api-key")
         return 1
-    
-    if not Path(args.project_dir).exists():
-        print(f"✗ Error: Project directory not found: {args.project_dir}")
+
+    # Security: Validate and resolve paths to prevent directory traversal
+    try:
+        project_dir = Path(args.project_dir).resolve()
+        deptrac_json = Path(args.deptrac_json).resolve()
+        output_dir = Path(args.output_dir).resolve()
+    except (ValueError, OSError) as e:
+        print(f"✗ Error: Invalid path: {e}")
         return 1
-    
-    if not Path(args.deptrac_json).exists():
-        print(f"✗ Error: Deptrac report not found: {args.deptrac_json}")
+
+    # Security: Check for directory traversal attempts
+    if '..' in Path(args.project_dir).parts:
+        print("✗ Error: Invalid project directory - directory traversal detected")
         return 1
+
+    if '..' in Path(args.deptrac_json).parts:
+        print("✗ Error: Invalid deptrac json path - directory traversal detected")
+        return 1
+
+    if '..' in Path(args.output_dir).parts:
+        print("✗ Error: Invalid output directory - directory traversal detected")
+        return 1
+
+    # Check paths exist
+    if not project_dir.exists():
+        print(f"✗ Error: Project directory not found: {project_dir}")
+        return 1
+
+    if not deptrac_json.exists():
+        print(f"✗ Error: Deptrac report not found: {deptrac_json}")
+        return 1
+
+    # Update args with validated paths
+    args.project_dir = str(project_dir)
+    args.deptrac_json = str(deptrac_json)
+    args.output_dir = str(output_dir)
     
     print(f"\n{'='*70}")
     print(f"C4 Level 4 Generator - Intelligent Component Selection")

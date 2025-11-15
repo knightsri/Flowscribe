@@ -149,9 +149,22 @@ class CostTracker:
 
 class LLMClient:
     """OpenRouter API client with cost tracking"""
-    
+
+    # Security: Maximum response size to prevent memory exhaustion
+    MAX_RESPONSE_SIZE = 10_000_000  # 10MB
+
     def __init__(self, api_key, model, tracker=None):
         self.api_key = api_key
+
+        # Security: Validate model name format to prevent injection
+        if not isinstance(model, str) or not model:
+            raise ValueError("Model must be a non-empty string")
+
+        # Allow alphanumeric, hyphens, slashes, dots, and underscores in model names
+        import re
+        if not re.match(r'^[a-zA-Z0-9._/-]+$', model):
+            raise ValueError(f"Invalid model name format: {model}")
+
         self.model = model
         self.tracker = tracker or CostTracker(model)
     
@@ -187,6 +200,12 @@ class LLMClient:
             
             # Extract content, usage, ids and model
             content = result.get('choices', [{}])[0].get('message', {}).get('content', '')
+
+            # Security: Limit response size to prevent memory exhaustion
+            if len(content) > self.MAX_RESPONSE_SIZE:
+                print(f"⚠ Warning: Response truncated (exceeded {self.MAX_RESPONSE_SIZE:,} chars)")
+                content = content[:self.MAX_RESPONSE_SIZE]
+
             usage = result.get('usage', {}) or {}
             input_tokens = int(usage.get('prompt_tokens', 0) or 0)
             output_tokens = int(usage.get('completion_tokens', 0) or 0)
