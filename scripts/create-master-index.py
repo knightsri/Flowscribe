@@ -17,6 +17,9 @@ import time
 import re
 from pathlib import Path
 from datetime import datetime
+from logger import setup_logger
+
+logger = setup_logger(__name__)
 
 try:
     import yaml
@@ -600,53 +603,53 @@ def main():
     try:
         output_path = Path(args.output).resolve()
     except (ValueError, OSError) as e:
-        print(f"✗ Error: Invalid path: {e}")
+        logger.error(f"✗ Error: Invalid path: {e}")
         raise SystemExit(1)
 
     # Security: Check for directory traversal attempts
     if '..' in Path(args.output).parts:
-        print("✗ Error: Invalid output path - directory traversal detected")
+        logger.error("✗ Error: Invalid output path - directory traversal detected")
         raise SystemExit(1)
 
     # Update args with validated path
     args.output = str(output_path)
 
-    print("="*70)
-    print("Master Index Generator")
-    print("="*70)
-    print(f"Project: {args.project}")
-    print(f"Output : {args.output}\n")
+    logger.info("="*70)
+    logger.info("Master Index Generator")
+    logger.info("="*70)
+    logger.info(f"Project: {args.project}")
+    logger.info(f"Output : {args.output}\n")
 
     start = time.time()
     try:
         out_dir = output_path.parent
         md = generate_master_index(args.project, out_dir)
     except FileNotFoundError as e:
-        print(f"✗ Error: {e}")
-        print("\nEnsure architecture-review.md exists before generating master index.")
-        print("Run: python3 c4-architecture-review.py --project <name> --domain <domain> --output-dir <dir> --api-key <key>")
+        logger.error(f"✗ Error: {e}")
+        logger.error("\nEnsure architecture-review.md exists before generating master index.")
+        logger.error("Run: python3 c4-architecture-review.py --project <name> --domain <domain> --output-dir <dir> --api-key <key>")
         raise SystemExit(1)
     except Exception as e:
-        print(f"✗ Error generating master index: {e}")
+        logger.error(f"✗ Error generating master index: {e}")
         raise SystemExit(1)
 
     try:
         out_path = Path(args.output)
         out_path.parent.mkdir(parents=True, exist_ok=True)
         out_path.write_text(md, encoding="utf-8")
-        print(f"✓ Generated: {out_path}")
+        logger.info(f"✓ Generated: {out_path}")
     except Exception as e:
-        print(f"✗ Error writing output: {e}")
+        logger.error(f"✗ Error writing output: {e}")
         raise SystemExit(1)
 
     elapsed = time.time() - start
-    print("\n" + "="*70)
-    print("✓ Master Index Created Successfully!")
-    print("="*70)
-    print(f"Project      : {args.project}")
-    print("Documentation: C4 L1, L2, L3, L4 + Architecture Review")
-    print(f"Time         : {elapsed:.1f}s")
-    print(f"\nOpen {out_path} to start exploring!\n")
+    logger.info("\n" + "="*70)
+    logger.info("✓ Master Index Created Successfully!")
+    logger.info("="*70)
+    logger.info(f"Project      : {args.project}")
+    logger.info("Documentation: C4 L1, L2, L3, L4 + Architecture Review")
+    logger.info(f"Time         : {elapsed:.1f}s")
+    logger.info(f"\nOpen {out_path} to start exploring!\n")
     return 0
 
 

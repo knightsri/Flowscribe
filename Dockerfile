@@ -36,11 +36,11 @@ RUN pip3 install --no-cache-dir \
     requests \
     pydeps
 
-# Install JavaScript analysis tools
+# Install JavaScript analysis tools (pinned versions)
 RUN npm install -g \
-    madge \
-    dependency-cruiser \
-    jsdoc
+    madge@6.1.0 \
+    dependency-cruiser@15.5.0 \
+    jsdoc@4.0.2
 
 # Install PHP analysis tools (including Deptrac and Structurizr)
 RUN composer global require \
@@ -52,8 +52,8 @@ RUN composer global require \
 # Add composer global bin to PATH
 ENV PATH="/root/.config/composer/vendor/bin:${PATH}"
 
-# Install Mermaid CLI
-RUN npm install -g @mermaid-js/mermaid-cli
+# Install Mermaid CLI (pinned version)
+RUN npm install -g @mermaid-js/mermaid-cli@10.6.1
 
 # Set working directory
 WORKDIR /workspace

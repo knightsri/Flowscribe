@@ -18,6 +18,9 @@ import sys
 import shutil
 import hashlib
 from typing import Dict, List
+from logger import setup_logger
+
+logger = setup_logger(__name__)
 
 def slugify_filename(name: str) -> str:
     p = Path(name)
@@ -63,7 +66,7 @@ def apply_renames(files: List[Path], mapping: Dict[str, str]):
                     shutil.move(str(dst), str(folder / (new + ".bak")))
                     shutil.move(str(src), str(dst))
                 except Exception as e:
-                    print(f"Warning: Could not rename {old} to {new}: {e}")
+                    logger.warning(f"Warning: Could not rename {old} to {new}: {e}")
 
 def rewrite_links_in_file(p: Path, mapping: Dict[str, str]) -> bool:
     text = p.read_text(encoding="utf-8", errors="ignore")
@@ -243,16 +246,16 @@ def main():
     args = ap.parse_args()
 
     summary = sanitize_output_dir(args.dir, recursive=(not args.no_recursive), to_div=args.to_div)
-    print("Sanitization Summary:")
-    print(f"  Markdown files found: {summary['files_found']}")
-    print(f"  Front matter added:   {summary['front_matter_added']} files")
-    print(f"  Renamed files:        {summary['renamed']}")
-    print(f"  Link rewrites:        {summary['link_rewrites']} files")
-    print(f"  Mermaid sanitized:    {summary['diagrams_sanitized']} files")
+    logger.info("Sanitization Summary:")
+    logger.info(f"  Markdown files found: {summary['files_found']}")
+    logger.info(f"  Front matter added:   {summary['front_matter_added']} files")
+    logger.info(f"  Renamed files:        {summary['renamed']}")
+    logger.info(f"  Link rewrites:        {summary['link_rewrites']} files")
+    logger.info(f"  Mermaid sanitized:    {summary['diagrams_sanitized']} files")
     if summary['mapping']:
-        print("  Mapping:")
+        logger.info("  Mapping:")
         for k, v in summary['mapping'].items():
-            print(f"    {k} -> {v}")
+            logger.info(f"    {k} -> {v}")
 
 if __name__ == "__main__":
     sys.exit(main())

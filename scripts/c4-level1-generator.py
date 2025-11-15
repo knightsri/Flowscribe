@@ -18,6 +18,9 @@ import json
 
 # Import shared utilities
 from flowscribe_utils import LLMClient, CostTracker, parse_llm_json, format_cost, format_duration
+from logger import setup_logger
+
+logger = setup_logger(__name__)
 
 LEVEL_KEY = "level1"
 SCHEMA_VERSION = "1.0"
@@ -64,9 +67,9 @@ def read_project_files(project_dir, max_file_size=50000):
                     if len(txt) > max_file_size:
                         txt = txt[:max_file_size] + "\n... [truncated]"
                     files_content[filepath.name] = txt
-                    print(f"✓ Read {filepath.name} ({len(txt)} chars)")
+                    logger.info(f"✓ Read {filepath.name} ({len(txt)} chars)")
                 except Exception as e:
-                    print(f"✗ Error reading {filepath.name}: {e}")
+                    logger.error(f"✗ Error reading {filepath.name}: {e}")
 
     # Additional docs
     docs_dir = project_path / 'docs'
@@ -78,9 +81,9 @@ def read_project_files(project_dir, max_file_size=50000):
                     if len(txt) > max_file_size:
                         txt = txt[:max_file_size] + "\n... [truncated]"
                     files_content[f'docs/{doc_file.name}'] = txt
-                    print(f"✓ Read docs/{doc_file.name} ({len(txt)} chars)")
+                    logger.info(f"✓ Read docs/{doc_file.name} ({len(txt)} chars)")
                 except Exception as e:
-                    print(f"✗ Error reading docs/{doc_file.name}: {e}")
+                    logger.error(f"✗ Error reading docs/{doc_file.name}: {e}")
 
     return files_content
 
@@ -143,8 +146,8 @@ def generate_markdown(project_name, domain, analysis_json_text):
     """Generate C4 Level 1 markdown from LLM analysis"""
     data = parse_llm_json(analysis_json_text)
     if not data:
-        print("✗ Error: Failed to parse LLM JSON response")
-        print(f"Response preview: {analysis_json_text[:500]}")
+        logger.error("✗ Error: Failed to parse LLM JSON response")
+        logger.error(f"Response preview: {analysis_json_text[:500]}")
         return None
 
     required_fields = ['system_description', 'system_purpose', 'users', 'external_systems']
@@ -278,10 +281,15 @@ def main():
     parser.add_argument('--model', default=os.environ.get('OPENROUTER_MODEL', 'anthropic/claude-sonnet-4.5'), help='Model to use')
     parser.add_argument('--output', required=True, help='Output markdown file path')
     parser.add_argument('--max-file-size', type=int, default=50000, help='Max file size to read')
+    parser.add_argument('--debug', action='store_true', help='Enable debug logging')
     args = parser.parse_args()
 
+    if args.debug:
+        from logger import set_debug_mode
+        set_debug_mode(logger, debug=True)
+
     if not args.api_key:
-        print("✗ Error: OpenRouter API key required (--api-key or OPENROUTER_API_KEY)")
+        logger.error("✗ Error: OpenRouter API key required (--api-key or OPENROUTER_API_KEY)")
         sys.exit(1)
 
     # Security: Validate and resolve paths to prevent directory traversal
@@ -289,80 +297,80 @@ def main():
         project_dir = Path(args.project_dir).resolve()
         output_path = Path(args.output).resolve()
     except (ValueError, OSError) as e:
-        print(f"✗ Error: Invalid path: {e}")
+        logger.error(f"✗ Error: Invalid path: {e}")
         sys.exit(1)
 
     # Security: Check for directory traversal attempts
     if '..' in Path(args.project_dir).parts:
-        print("✗ Error: Invalid project directory - directory traversal detected")
+        logger.error("✗ Error: Invalid project directory - directory traversal detected")
         sys.exit(1)
 
     if '..' in Path(args.output).parts:
-        print("✗ Error: Invalid output path - directory traversal detected")
+        logger.error("✗ Error: Invalid output path - directory traversal detected")
         sys.exit(1)
 
     # Check project directory exists
     if not project_dir.exists():
-        print(f"✗ Error: Project directory not found: {project_dir}")
+        logger.error(f"✗ Error: Project directory not found: {project_dir}")
         sys.exit(1)
 
     # Update args with validated paths
     args.project_dir = str(project_dir)
     args.output = str(output_path)
 
-    print("\n" + "="*60)
-    print("C4 Level 1 Generator - System Context Analysis")
-    print("="*60 + "\n")
-    print(f"Project: {args.project}")
-    print(f"Domain: {args.domain}")
-    print(f"Model: {args.model}")
-    print(f"Project Directory: {args.project_dir}")
-    print(f"Output: {args.output}\n")
+    logger.info("\n" + "="*60)
+    logger.info("C4 Level 1 Generator - System Context Analysis")
+    logger.info("="*60 + "\n")
+    logger.info(f"Project: {args.project}")
+    logger.info(f"Domain: {args.domain}")
+    logger.info(f"Model: {args.model}")
+    logger.info(f"Project Directory: {args.project_dir}")
+    logger.info(f"Output: {args.output}\n")
 
     tracker = CostTracker(args.model)
     llm = LLMClient(args.api_key, args.model, tracker)
 
     # Step 1: Read project files
-    print("Step 1: Reading project files...")
+    logger.info("Step 1: Reading project files...")
     files_content = read_project_files(args.project_dir, args.max_file_size)
     if not files_content:
-        print("✗ Error: No relevant project files found")
+        logger.error("✗ Error: No relevant project files found")
         sys.exit(1)
-    print(f"✓ Found {len(files_content)} relevant files\n")
+    logger.info(f"✓ Found {len(files_content)} relevant files\n")
 
     # Step 2: Build prompt
-    print("Step 2: Building analysis prompt...")
+    logger.info("Step 2: Building analysis prompt...")
     prompt = build_analysis_prompt(args.project, args.domain, files_content)
-    print(f"✓ Prompt ready ({len(prompt)} chars)\n")
+    logger.info(f"✓ Prompt ready ({len(prompt)} chars)\n")
 
     # Step 3: Call LLM
-    print("Step 3: Analyzing with LLM...\n")
+    logger.info("Step 3: Analyzing with LLM...\n")
     t0 = time.time()
     result = llm.call(prompt)
     duration = time.time() - t0
 
     if not result:
-        print("✗ Error: LLM analysis failed")
+        logger.error("✗ Error: LLM analysis failed")
         sys.exit(1)
 
-    print("✓ Analysis complete")
-    print(f"  Cost: {format_cost(result['cost'])}")
-    print(f"  Time: {format_duration(result['duration'])}")
-    print(f"  Tokens: {result['total_tokens']:,} ({result['input_tokens']:,} in / {result['output_tokens']:,} out)\n")
+    logger.info("✓ Analysis complete")
+    logger.info(f"  Cost: {format_cost(result['cost'])}")
+    logger.info(f"  Time: {format_duration(result['duration'])}")
+    logger.info(f"  Tokens: {result['total_tokens']:,} ({result['input_tokens']:,} in / {result['output_tokens']:,} out)\n")
 
     # Step 4: Generate markdown
-    print("Step 4: Generating C4 Level 1 markdown...")
+    logger.info("Step 4: Generating C4 Level 1 markdown...")
     markdown = generate_markdown(args.project, args.domain, result['content'])
     if not markdown:
-        print("✗ Error: Failed to generate markdown")
+        logger.error("✗ Error: Failed to generate markdown")
         sys.exit(1)
 
     # Step 5: Write output
-    print("Step 5: Writing output file...")
+    logger.info("Step 5: Writing output file...")
     out_path = Path(args.output)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(markdown, encoding='utf-8')
-    print(f"✓ Written to {args.output}\n")
+    logger.info(f"✓ Written to {args.output}\n")
 
     # Print tracker summary (optional)
     tracker.print_summary()
@@ -405,11 +413,11 @@ def main():
     }
     metrics_path = out_path.parent / '.c4-level1-metrics.json'
     metrics_path.write_text(json.dumps(metrics, indent=2), encoding='utf-8')
-    print(f"✓ Metrics saved to {metrics_path}")
+    logger.info(f"✓ Metrics saved to {metrics_path}")
 
-    print("\n" + "="*60)
-    print("✓ C4 Level 1 documentation generated successfully!")
-    print("="*60 + "\n")
+    logger.info("\n" + "="*60)
+    logger.info("✓ C4 Level 1 documentation generated successfully!")
+    logger.info("="*60 + "\n")
     return 0
 
 

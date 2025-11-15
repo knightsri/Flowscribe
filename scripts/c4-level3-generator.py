@@ -19,6 +19,9 @@ from collections import defaultdict
 # Import shared utilities
 from flowscribe_utils import CostTracker, format_duration
 from flowscribe_utils import MermaidIdRegistry, mermaid_safe_id
+from logger import setup_logger
+
+logger = setup_logger(__name__)
 
 
 class C4Level3Generator:
@@ -46,13 +49,13 @@ class C4Level3Generator:
             with open(self.report_path, 'r') as f:
                 self.report = json.load(f)
         except json.JSONDecodeError as e:
-            print(f"✗ Error: Invalid JSON in Deptrac report: {e}")
+            logger.error(f"✗ Error: Invalid JSON in Deptrac report: {e}")
             raise
         except FileNotFoundError:
-            print(f"✗ Error: Deptrac report not found: {self.report_path}")
+            logger.error(f"✗ Error: Deptrac report not found: {self.report_path}")
             raise
         except Exception as e:
-            print(f"✗ Error loading Deptrac report: {e}")
+            logger.error(f"✗ Error loading Deptrac report: {e}")
             raise
         
         load_time = time.time() - load_start
@@ -61,7 +64,7 @@ class C4Level3Generator:
         if not isinstance(self.report, dict):
             raise ValueError("Deptrac report must be a JSON object")
         if 'files' not in self.report:
-            print("⚠️  Warning: Deptrac report missing 'files' field")
+            logger.warning("⚠️  Warning: Deptrac report missing 'files' field")
         
         self.layer_components = defaultdict(lambda: defaultdict(list))
         self.component_dependencies = []
@@ -120,19 +123,19 @@ class C4Level3Generator:
         
         # Check if we found anything
         if not self.layer_components:
-            print("⚠️  Warning: No components found in Deptrac report")
-            print("   This may indicate:")
-            print("   - No violations in the report")
-            print("   - Unexpected report format")
+            logger.warning("⚠️  Warning: No components found in Deptrac report")
+            logger.warning("   This may indicate:")
+            logger.warning("   - No violations in the report")
+            logger.warning("   - Unexpected report format")
 
     def _parse_components_from_filesystem(self):
         """Extract components by scanning filesystem using deptrac.yaml layer definitions"""
         # Try to read deptrac.yaml
         deptrac_yaml = self.project_dir / 'deptrac.yaml'
-        
+
         if not deptrac_yaml.exists():
-            print(f"⚠️  Warning: deptrac.yaml not found at {deptrac_yaml}")
-            print("   Falling back to violation-based parsing")
+            logger.warning(f"⚠️  Warning: deptrac.yaml not found at {deptrac_yaml}")
+            logger.warning("   Falling back to violation-based parsing")
             self._parse_components()  # Fallback to old method
             return
         
@@ -181,15 +184,15 @@ class C4Level3Generator:
             
             # Also parse violations for dependency information
             self._parse_violations_for_dependencies()
-            
-            print(f"✓ Loaded components from filesystem")
-            print(f"  Found {len(self.layer_components)} layers")
-            
+
+            logger.info(f"✓ Loaded components from filesystem")
+            logger.info(f"  Found {len(self.layer_components)} layers")
+
         except Exception as e:
-            print(f"⚠️  Error parsing deptrac.yaml: {e}")
+            logger.warning(f"⚠️  Error parsing deptrac.yaml: {e}")
             import traceback
             traceback.print_exc()
-            print("   Falling back to violation-based parsing")
+            logger.warning("   Falling back to violation-based parsing")
             self._parse_components()  # Fallback
     
 
@@ -524,12 +527,16 @@ def main():
     )
     
     parser.add_argument(
-        '--project-dir', 
+        '--project-dir',
         help='Project directory path'
     )
-
+    parser.add_argument('--debug', action='store_true', help='Enable debug logging')
 
     args = parser.parse_args()
+
+    if args.debug:
+        from logger import set_debug_mode
+        set_debug_mode(logger, debug=True)
 
     # Security: Validate and resolve paths to prevent directory traversal
     try:
@@ -542,26 +549,26 @@ def main():
         else:
             project_dir = None
     except (ValueError, OSError) as e:
-        print(f"✗ Error: Invalid path: {e}")
+        logger.error(f"✗ Error: Invalid path: {e}")
         return 1
 
     # Security: Check for directory traversal attempts
     if '..' in Path(args.deptrac_report).parts:
-        print("✗ Error: Invalid deptrac report path - directory traversal detected")
+        logger.error("✗ Error: Invalid deptrac report path - directory traversal detected")
         return 1
 
     if '..' in Path(args.output).parts:
-        print("✗ Error: Invalid output path - directory traversal detected")
+        logger.error("✗ Error: Invalid output path - directory traversal detected")
         return 1
 
     if args.project_dir and '..' in Path(args.project_dir).parts:
-        print("✗ Error: Invalid project directory - directory traversal detected")
+        logger.error("✗ Error: Invalid project directory - directory traversal detected")
         return 1
 
     # Check deptrac report exists
     if not deptrac_report.exists():
-        print(f"✗ Error: Deptrac report not found: {deptrac_report}")
-        print(f"\n⚠️  Make sure you've run deptrac analysis first")
+        logger.error(f"✗ Error: Deptrac report not found: {deptrac_report}")
+        logger.error(f"\n⚠️  Make sure you've run deptrac analysis first")
         return 1
 
     # Update args with validated paths
@@ -569,65 +576,65 @@ def main():
     args.output = str(output_path)
     if project_dir:
         args.project_dir = str(project_dir)
-    
-    print(f"\n{'='*60}")
-    print(f"C4 Level 3 Generator - Component Diagram")
-    print(f"{'='*60}\n")
-    print(f"Project: {args.project}")
-    print(f"Layer: {args.layer}")
-    print(f"Deptrac Report: {args.deptrac_report}")
-    print(f"Output: {args.output}\n")
-    
+
+    logger.info(f"\n{'='*60}")
+    logger.info(f"C4 Level 3 Generator - Component Diagram")
+    logger.info(f"{'='*60}\n")
+    logger.info(f"Project: {args.project}")
+    logger.info(f"Layer: {args.layer}")
+    logger.info(f"Deptrac Report: {args.deptrac_report}")
+    logger.info(f"Output: {args.output}\n")
+
     # Step 1: Load and parse
-    print(f"Step 1: Loading Deptrac report and extracting {args.layer} components...")
+    logger.info(f"Step 1: Loading Deptrac report and extracting {args.layer} components...")
     start_time = time.time()
     
     try:
         generator = C4Level3Generator(args.deptrac_report, project_dir=args.project_dir, model='none')
     except Exception as e:
-        print(f"✗ Error: Failed to load Deptrac report: {e}")
+        logger.error(f"✗ Error: Failed to load Deptrac report: {e}")
         return 1
-    
+
     load_time = time.time() - start_time
-    
+
     # Check if layer exists
     if args.layer not in generator.layer_components:
         available = ', '.join(generator.layer_components.keys()) if generator.layer_components else 'None'
-        print(f"✗ Error: Layer '{args.layer}' not found")
-        print(f"  Available layers: {available}")
+        logger.error(f"✗ Error: Layer '{args.layer}' not found")
+        logger.error(f"  Available layers: {available}")
         return 1
-    
+
     component_count = len(generator.layer_components[args.layer])
-    
-    print(f"✓ Loaded and parsed report")
-    print(f"  Components in {args.layer}: {component_count}")
-    print(f"  Time: {format_duration(load_time)}\n")
-    
+
+    logger.info(f"✓ Loaded and parsed report")
+    logger.info(f"  Components in {args.layer}: {component_count}")
+    logger.info(f"  Time: {format_duration(load_time)}\n")
+
     # Step 2: Generate markdown
-    print("Step 2: Generating C4 Level 3 markdown...")
+    logger.info("Step 2: Generating C4 Level 3 markdown...")
     gen_start = time.time()
-    
+
     markdown = generator.generate_markdown(args.layer, args.project)
-    
+
     gen_time = time.time() - gen_start
-    print(f"✓ Generated markdown")
-    print(f"  Time: {format_duration(gen_time)}\n")
-    
+    logger.info(f"✓ Generated markdown")
+    logger.info(f"  Time: {format_duration(gen_time)}\n")
+
     # Step 3: Write output
-    print("Step 3: Writing output file...")
+    logger.info("Step 3: Writing output file...")
     output_path = Path(args.output)
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    
+
     try:
         with open(output_path, 'w', encoding='utf-8') as f:
             f.write(markdown)
-        print(f"✓ Written to {args.output}\n")
+        logger.info(f"✓ Written to {args.output}\n")
     except Exception as e:
-        print(f"✗ Error writing output file: {e}")
+        logger.error(f"✗ Error writing output file: {e}")
         return 1
-    
+
     # Step 4: Save canonical metrics (v1.0; no LLM usage here)
-    print("Step 4: Saving metrics (v1.0)...")
+    logger.info("Step 4: Saving metrics (v1.0)...")
     
     total_time = time.time() - start_time
     generator.tracker.total_time = total_time
@@ -670,12 +677,12 @@ def main():
     }
     metrics_path = output_path.parent / f'.c4-level3-{args.layer.lower()}-metrics.json'
     metrics_path.write_text(json.dumps(metrics, indent=2), encoding='utf-8')
-    print(f"✓ Metrics saved to {metrics_path}")
-    
-    print(f"\n{'='*60}")
-    print(f"✓ C4 Level 3 ({args.layer}) documentation generated!")
-    print(f"{'='*60}\n")
-    
+    logger.info(f"✓ Metrics saved to {metrics_path}")
+
+    logger.info(f"\n{'='*60}")
+    logger.info(f"✓ C4 Level 3 ({args.layer}) documentation generated!")
+    logger.info(f"{'='*60}\n")
+
     return 0
 
 

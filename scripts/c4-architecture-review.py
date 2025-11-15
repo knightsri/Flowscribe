@@ -26,6 +26,9 @@ from datetime import datetime
 
 # Import shared utilities
 from flowscribe_utils import LLMClient, CostTracker, format_cost, format_duration
+from logger import setup_logger
+
+logger = setup_logger(__name__)
 
 LEVEL_KEY = "architecture_review"
 SCHEMA_VERSION = "1.0"
@@ -242,66 +245,66 @@ def _extract_usage_calls(result, default_model):
 
 def generate_review(project_name, domain, output_dir, api_key, model):
     """Generate architectural review and canonical metrics"""
-    print("="*70)
-    print("C4 Architecture Review Generator")
-    print("="*70)
-    print(f"Project: {project_name}")
-    print(f"Domain: {domain}")
-    print(f"Model: {model}")
-    print(f"Output Directory: {output_dir}")
-    print()
-    
+    logger.info("="*70)
+    logger.info("C4 Architecture Review Generator")
+    logger.info("="*70)
+    logger.info(f"Project: {project_name}")
+    logger.info(f"Domain: {domain}")
+    logger.info(f"Model: {model}")
+    logger.info(f"Output Directory: {output_dir}")
+    logger.info("")
+
     # Step 1: Read documentation
-    print("Step 1: Reading generated C4 documentation...")
+    logger.info("Step 1: Reading generated C4 documentation...")
     docs = read_c4_documentation(output_dir)
     doc_count = (1 if docs.get('level1') else 0) + (1 if docs.get('level2') else 0) + len(docs.get('level3_layers', [])) + (1 if docs.get('level4') else 0)
     if doc_count == 0:
-        print("✗ Error: No C4 documentation found")
+        logger.error("✗ Error: No C4 documentation found")
         return None
-    print(f"✓ Found {doc_count} documentation files\n")
-    
+    logger.info(f"✓ Found {doc_count} documentation files\n")
+
     # Step 2: Deptrac report (optional)
-    print("Step 2: Reading dependency analysis...")
+    logger.info("Step 2: Reading dependency analysis...")
     deptrac_report = read_deptrac_report(output_dir)
-    print("✓ Deptrac report loaded\n" if deptrac_report else "⚠ No deptrac report found (review will be limited)\n")
-    
+    logger.info("✓ Deptrac report loaded\n" if deptrac_report else "⚠ No deptrac report found (review will be limited)\n")
+
     # Step 3: Build prompt
-    print("Step 3: Building architectural review prompt...")
+    logger.info("Step 3: Building architectural review prompt...")
     prompt = build_review_prompt(project_name, domain, docs, deptrac_report, model)
-    print(f"✓ Prompt ready ({len(prompt):,} characters)\n")
-    
+    logger.info(f"✓ Prompt ready ({len(prompt):,} characters)\n")
+
     # Step 4: Call LLM
-    print("Step 4: Generating architectural review with premium model...\n")
+    logger.info("Step 4: Generating architectural review with premium model...\n")
     tracker = CostTracker(model)
     llm = LLMClient(api_key, model, tracker)
     t0 = time.time()
     result = llm.call(prompt)
     duration = time.time() - t0
     if not result:
-        print("✗ Error: Failed to generate review")
+        logger.error("✗ Error: Failed to generate review")
         return None
-    
+
     review_content = result.get('content', '')
-    print("✓ Review generated")
+    logger.info("✓ Review generated")
     # Prefer usage.cost if available
     calls = _extract_usage_calls(result, default_model=model)
     cost_usd = sum(c.get("cost_usd", 0.0) for c in calls)
     tokens_in = sum(c.get("prompt_tokens", 0) for c in calls)
     tokens_out = sum(c.get("completion_tokens", 0) for c in calls)
     total_tokens = sum(c.get("total_tokens", 0) for c in calls) or (tokens_in + tokens_out)
-    print(f"  Cost: {format_cost(cost_usd)}")
-    print(f"  Time: {format_duration(duration)}")
-    print(f"  Tokens: in={tokens_in:,}, out={tokens_out:,}, total={total_tokens:,}")
-    print(f"  Output: {len(review_content):,} characters\n")
-    
+    logger.info(f"  Cost: {format_cost(cost_usd)}")
+    logger.info(f"  Time: {format_duration(duration)}")
+    logger.info(f"  Tokens: in={tokens_in:,}, out={tokens_out:,}, total={total_tokens:,}")
+    logger.info(f"  Output: {len(review_content):,} characters\n")
+
     # Step 5: Save review
-    print("Step 5: Saving architectural review...")
+    logger.info("Step 5: Saving architectural review...")
     output_file = Path(output_dir) / 'architecture-review.md'
     output_file.write_text(review_content, encoding='utf-8')
-    print(f"✓ Saved to: {output_file}\n")
-    
+    logger.info(f"✓ Saved to: {output_file}\n")
+
     # Step 6: Save canonical metrics (v1.0)
-    print("Step 6: Writing metrics (v1.0)...")
+    logger.info("Step 6: Writing metrics (v1.0)...")
     metrics = {
         "version": SCHEMA_VERSION,
         "repo": {
@@ -339,8 +342,8 @@ def generate_review(project_name, domain, output_dir, api_key, model):
     }
     metrics_file = Path(output_dir) / '.architecture-review-metrics.json'
     metrics_file.write_text(json.dumps(metrics, indent=2), encoding='utf-8')
-    print(f"✓ Metrics saved to: {metrics_file}")
-    
+    logger.info(f"✓ Metrics saved to: {metrics_file}")
+
     return metrics
 
 
@@ -358,24 +361,29 @@ def main():
         default='anthropic/claude-sonnet-4.5',
         help='Model to use for review (default: Claude Sonnet 4.5)'
     )
+    parser.add_argument('--debug', action='store_true', help='Enable debug logging')
     args = parser.parse_args()
+
+    if args.debug:
+        from logger import set_debug_mode
+        set_debug_mode(logger, debug=True)
 
     # Security: Validate and resolve paths to prevent directory traversal
     try:
         output_dir = Path(args.output_dir).resolve()
     except (ValueError, OSError) as e:
-        print(f"✗ Error: Invalid path: {e}")
+        logger.error(f"✗ Error: Invalid path: {e}")
         return 1
 
     # Security: Check for directory traversal attempts
     if '..' in Path(args.output_dir).parts:
-        print("✗ Error: Invalid output directory - directory traversal detected")
+        logger.error("✗ Error: Invalid output directory - directory traversal detected")
         return 1
 
     # Check output directory exists
     if not output_dir.exists():
-        print(f"✗ Error: Output directory not found: {output_dir}")
-        print("Make sure to run the C4 generators first")
+        logger.error(f"✗ Error: Output directory not found: {output_dir}")
+        logger.error("Make sure to run the C4 generators first")
         return 1
 
     # Update args with validated path
@@ -389,13 +397,13 @@ def main():
         args.model
     )
     if metrics:
-        print("="*70)
-        print("Architectural Review Complete!")
-        print("="*70)
-        print(f"Review: {args.output_dir}/architecture-review.md")
-        print(f"Cost: {format_cost(metrics['levels'][LEVEL_KEY]['cost_usd'])}")
-        print(f"Time: {format_duration(metrics['levels'][LEVEL_KEY]['time_seconds'])}")
-        print()
+        logger.info("="*70)
+        logger.info("Architectural Review Complete!")
+        logger.info("="*70)
+        logger.info(f"Review: {args.output_dir}/architecture-review.md")
+        logger.info(f"Cost: {format_cost(metrics['levels'][LEVEL_KEY]['cost_usd'])}")
+        logger.info(f"Time: {format_duration(metrics['levels'][LEVEL_KEY]['time_seconds'])}")
+        logger.info("")
         return 0
     else:
         return 1

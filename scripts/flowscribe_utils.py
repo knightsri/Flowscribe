@@ -13,6 +13,10 @@ import json
 import time
 from datetime import datetime
 import requests
+from logger import setup_logger
+
+# Setup module logger
+logger = setup_logger(__name__)
 
 
 class CostTracker:
@@ -70,9 +74,9 @@ class CostTracker:
             return pricing_db[model]
         
         # Default pricing for unknown models
-        print(f"⚠ Warning: Unknown model pricing for '{model}'")
-        print(f"  Using default: $3/$15 per 1M tokens")
-        print(f"  Set OPENROUTER_MODEL_INPUT_COST_PER_1M and OPENROUTER_MODEL_OUTPUT_COST_PER_1M to override")
+        logger.warning(f"Unknown model pricing for '{model}'")
+        logger.warning(f"Using default: $3/$15 per 1M tokens")
+        logger.warning(f"Set OPENROUTER_MODEL_INPUT_COST_PER_1M and OPENROUTER_MODEL_OUTPUT_COST_PER_1M to override")
         return {
             'input': 3.0,
             'output': 15.0,
@@ -126,16 +130,16 @@ class CostTracker:
     def print_summary(self, prefix=""):
         """Print formatted summary"""
         summary = self.get_summary()
-        
-        print(f"\n{prefix}Cost & Performance Summary:")
-        print(f"{prefix}  Model:         {summary['model']}")
-        print(f"{prefix}  Pricing:       ${summary['pricing']['input_per_1m']:.2f}/${summary['pricing']['output_per_1m']:.2f} per 1M ({summary['pricing']['source']})")
-        print(f"{prefix}  Total Cost:    ${summary['total_cost']:.4f}")
-        print(f"{prefix}  Total Time:    {summary['total_time']:.1f}s")
-        print(f"{prefix}  Input Tokens:  {summary['total_input_tokens']:,}")
-        print(f"{prefix}  Output Tokens: {summary['total_output_tokens']:,}")
-        print(f"{prefix}  Total Tokens:  {summary['total_tokens']:,}")
-        print(f"{prefix}  API Calls:     {summary['num_calls']}")
+
+        logger.info(f"\n{prefix}Cost & Performance Summary:")
+        logger.info(f"{prefix}  Model:         {summary['model']}")
+        logger.info(f"{prefix}  Pricing:       ${summary['pricing']['input_per_1m']:.2f}/${summary['pricing']['output_per_1m']:.2f} per 1M ({summary['pricing']['source']})")
+        logger.info(f"{prefix}  Total Cost:    ${summary['total_cost']:.4f}")
+        logger.info(f"{prefix}  Total Time:    {summary['total_time']:.1f}s")
+        logger.info(f"{prefix}  Input Tokens:  {summary['total_input_tokens']:,}")
+        logger.info(f"{prefix}  Output Tokens: {summary['total_output_tokens']:,}")
+        logger.info(f"{prefix}  Total Tokens:  {summary['total_tokens']:,}")
+        logger.info(f"{prefix}  API Calls:     {summary['num_calls']}")
     
     def save_to_file(self, filepath):
         """Save metrics to JSON file"""
@@ -203,7 +207,7 @@ class LLMClient:
 
             # Security: Limit response size to prevent memory exhaustion
             if len(content) > self.MAX_RESPONSE_SIZE:
-                print(f"⚠ Warning: Response truncated (exceeded {self.MAX_RESPONSE_SIZE:,} chars)")
+                logger.warning(f"Response truncated (exceeded {self.MAX_RESPONSE_SIZE:,} chars)")
                 content = content[:self.MAX_RESPONSE_SIZE]
 
             usage = result.get('usage', {}) or {}
@@ -243,13 +247,13 @@ class LLMClient:
             }
             
         except requests.exceptions.Timeout:
-            print(f"✗ API request timed out after {timeout}s")
+            logger.error(f"API request timed out after {timeout}s")
             return None
         except requests.exceptions.RequestException as e:
-            print(f"✗ API request failed: {e}")
+            logger.error(f"API request failed: {e}")
             return None
         except (KeyError, IndexError, ValueError) as e:
-            print(f"✗ Unexpected API response format: {e}")
+            logger.error(f"Unexpected API response format: {e}")
             return None
 
 
@@ -272,8 +276,8 @@ def parse_llm_json(response_text):
     try:
         return json.loads(cleaned)
     except json.JSONDecodeError as e:
-        print(f"✗ Failed to parse JSON: {e}")
-        print(f"Response text:\n{response_text[:500]}")
+        logger.error(f"Failed to parse JSON: {e}")
+        logger.debug(f"Response text:\n{response_text[:500]}")
         return None
 
 
