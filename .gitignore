@@ -42,7 +42,7 @@ yarn-error.log
 
 # PHP
 /vendor/
-composer.lock
+# Note: composer.lock should be committed for reproducible builds
 
 # IDE
 .vscode/

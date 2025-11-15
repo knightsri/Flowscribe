@@ -17,6 +17,9 @@ from pathlib import Path
 
 # Import shared utilities
 from flowscribe_utils import LLMClient, CostTracker, parse_llm_json, format_cost, format_duration
+from logger import setup_logger
+
+logger = setup_logger(__name__)
 
 
 def load_deptrac_report(deptrac_json_path):
@@ -25,13 +28,13 @@ def load_deptrac_report(deptrac_json_path):
         with open(deptrac_json_path, 'r') as f:
             return json.load(f)
     except json.JSONDecodeError as e:
-        print(f"✗ Error: Invalid JSON in deptrac report: {e}")
+        logger.error(f"✗ Error: Invalid JSON in deptrac report: {e}")
         return None
     except FileNotFoundError:
-        print(f"✗ Error: Deptrac report not found: {deptrac_json_path}")
+        logger.error(f"✗ Error: Deptrac report not found: {deptrac_json_path}")
         return None
     except Exception as e:
-        print(f"✗ Error loading deptrac report: {e}")
+        logger.error(f"✗ Error loading deptrac report: {e}")
         return None
 
 
@@ -61,14 +64,14 @@ def scan_codebase_structure(project_dir):
             paths = config.get('deptrac', {}).get('paths', [])
             # Remove ./ prefix and add to search_dirs
             search_dirs = [p.lstrip('./') for p in paths]
-            print(f"  Using directories from deptrac.yaml: {', '.join(search_dirs)}")
+            logger.info(f"  Using directories from deptrac.yaml: {', '.join(search_dirs)}")
         except Exception as e:
-            print(f"  ⚠️  Could not read deptrac.yaml: {e}")
+            logger.warning(f"  ⚠ Could not read deptrac.yaml: {e}")
     
     # Fallback to common directories if deptrac.yaml not found or failed
     if not search_dirs:
         search_dirs = ['classes', 'controllers', 'pages', 'api', 'lib', 'src', 'app', 'system']
-        print(f"  Using default search directories")
+        logger.info(f"  Using default search directories")
     
     for search_dir in search_dirs:
         dir_path = project_path / search_dir
@@ -205,7 +208,7 @@ def read_component_code(project_dir, file_path):
                 code = code[:30000] + "\n... [truncated - file too large]"
             return code
     except Exception as e:
-        print(f"✗ Error reading {file_path}: {e}")
+        logger.error(f"✗ Error reading {file_path}: {e}")
         return None
 
 
@@ -599,38 +602,33 @@ def main():
         required=True,
         help='Project domain (e.g., "scholarly publishing")'
     )
-    
-    parser.add_argument(
-        '--api-key',
-        default=os.environ.get('OPENROUTER_API_KEY'),
-        help='OpenRouter API key'
-    )
-    
+
     parser.add_argument(
         '--model',
         default=os.environ.get('OPENROUTER_MODEL', 'anthropic/claude-sonnet-4-20250514'),
         help='Model to use'
     )
-    
+
     parser.add_argument(
         '--output-dir',
         required=True,
         help='Output directory for generated documentation'
     )
-    
+
     parser.add_argument(
         '--max-components',
         type=int,
         default=12,
         help='Maximum number of components to document (default: 12)'
     )
-    
+
     args = parser.parse_args()
 
-    # Validate API key
-    if not args.api_key:
-        print("✗ Error: OpenRouter API key required")
-        print("Set OPENROUTER_API_KEY environment variable or use --api-key")
+    # Get API key from environment only
+    api_key = os.environ.get('OPENROUTER_API_KEY')
+    if not api_key:
+        logger.error("✗ Error: OpenRouter API key required")
+        logger.error("Set OPENROUTER_API_KEY environment variable")
         return 1
 
     # Security: Validate and resolve paths to prevent directory traversal
@@ -639,47 +637,47 @@ def main():
         deptrac_json = Path(args.deptrac_json).resolve()
         output_dir = Path(args.output_dir).resolve()
     except (ValueError, OSError) as e:
-        print(f"✗ Error: Invalid path: {e}")
+        logger.error(f"✗ Error: Invalid path: {e}")
         return 1
 
     # Security: Check for directory traversal attempts
     if '..' in Path(args.project_dir).parts:
-        print("✗ Error: Invalid project directory - directory traversal detected")
+        logger.error("✗ Error: Invalid project directory - directory traversal detected")
         return 1
 
     if '..' in Path(args.deptrac_json).parts:
-        print("✗ Error: Invalid deptrac json path - directory traversal detected")
+        logger.error("✗ Error: Invalid deptrac json path - directory traversal detected")
         return 1
 
     if '..' in Path(args.output_dir).parts:
-        print("✗ Error: Invalid output directory - directory traversal detected")
+        logger.error("✗ Error: Invalid output directory - directory traversal detected")
         return 1
 
     # Check paths exist
     if not project_dir.exists():
-        print(f"✗ Error: Project directory not found: {project_dir}")
+        logger.error(f"✗ Error: Project directory not found: {project_dir}")
         return 1
 
     if not deptrac_json.exists():
-        print(f"✗ Error: Deptrac report not found: {deptrac_json}")
+        logger.error(f"✗ Error: Deptrac report not found: {deptrac_json}")
         return 1
 
     # Update args with validated paths
     args.project_dir = str(project_dir)
     args.deptrac_json = str(deptrac_json)
     args.output_dir = str(output_dir)
-    
-    print(f"\n{'='*70}")
-    print(f"C4 Level 4 Generator - Intelligent Component Selection")
-    print(f"{'='*70}\n")
-    print(f"Project: {args.project}")
-    print(f"Domain: {args.domain}")
-    print(f"Model: {args.model}")
-    print(f"Max Components: {args.max_components}\n")
+
+    logger.info(f"\n{'='*70}")
+    logger.info(f"C4 Level 4 Generator - Intelligent Component Selection")
+    logger.info(f"{'='*70}\n")
+    logger.info(f"Project: {args.project}")
+    logger.info(f"Domain: {args.domain}")
+    logger.info(f"Model: {args.model}")
+    logger.info(f"Max Components: {args.max_components}\n")
     
     # Initialize cost tracker and LLM client
     tracker = CostTracker(args.model)
-    llm = LLMClient(args.api_key, args.model, tracker)
+    llm = LLMClient(api_key, args.model, tracker)
     
     # Create output directory
     output_dir = Path(args.output_dir)
@@ -689,147 +687,147 @@ def main():
     start_time = time.time()
     
     # Phase 1: Component Selection
-    print("=" * 70)
-    print("PHASE 1: Intelligent Component Selection")
-    print("=" * 70 + "\n")
-    
-    print("Step 1: Loading deptrac analysis...")
+    logger.info("=" * 70)
+    logger.info("PHASE 1: Intelligent Component Selection")
+    logger.info("=" * 70 + "\n")
+
+    logger.info("Step 1: Loading deptrac analysis...")
     phase1_start = time.time()
-    
+
     deptrac_data = load_deptrac_report(args.deptrac_json)
     if deptrac_data:
-        print("✓ Deptrac data loaded\n")
+        logger.info("✓ Deptrac data loaded\n")
     else:
-        print("⚠️  Warning: Could not load deptrac data, continuing anyway\n")
-    
-    print("Step 2: Scanning codebase structure...")
+        logger.warning("⚠ Warning: Could not load deptrac data, continuing anyway\n")
+
+    logger.info("Step 2: Scanning codebase structure...")
     php_files = scan_codebase_structure(args.project_dir)
-    print(f"✓ Found {len(php_files)} PHP files\n")
-    
+    logger.info(f"✓ Found {len(php_files)} PHP files\n")
+
     if not php_files:
-        print("✗ Error: No PHP files found in project")
+        logger.error("✗ Error: No PHP files found in project")
         return 1
-    
-    print("Step 3: Building component selection prompt...")
+
+    logger.info("Step 3: Building component selection prompt...")
     selection_prompt = build_selection_prompt(args.project, args.domain, deptrac_data, php_files)
-    print(f"✓ Prompt ready ({len(selection_prompt)} chars)\n")
-    
-    print("Step 4: Asking LLM to select most important components...")
-    print("(This may take 30-90 seconds...)\n")
+    logger.info(f"✓ Prompt ready ({len(selection_prompt)} chars)\n")
+
+    logger.info("Step 4: Asking LLM to select most important components...")
+    logger.info("(This may take 30-90 seconds...)\n")
     
     selection_result = llm.call(selection_prompt)
-    
+
     if not selection_result:
-        print("✗ Error: Component selection failed")
+        logger.error("✗ Error: Component selection failed")
         return 1
-    
-    print(f"✓ Selection complete")
-    print(f"  Cost: {format_cost(selection_result['cost'])}")
-    print(f"  Time: {format_duration(selection_result['duration'])}")
-    print(f"  Tokens: {selection_result['total_tokens']:,}\n")
+
+    logger.info(f"✓ Selection complete")
+    logger.info(f"  Cost: {format_cost(selection_result['cost'])}")
+    logger.info(f"  Time: {format_duration(selection_result['duration'])}")
+    logger.info(f"  Tokens: {selection_result['total_tokens']:,}\n")
     
     # Parse selection
     selection_data = parse_llm_json(selection_result['content'])
-    
+
     if not selection_data:
-        print("✗ Error: Could not parse LLM selection response")
+        logger.error("✗ Error: Could not parse LLM selection response")
         return 1
-    
+
     selected_components = selection_data.get('selected_components', [])[:args.max_components]
     honorable_mentions = selection_data.get('honorable_mentions', [])
     rationale = selection_data.get('selection_rationale', 'N/A')
-    
+
     if not selected_components:
-        print("✗ Error: No components selected by LLM")
+        logger.error("✗ Error: No components selected by LLM")
         return 1
-    
-    print(f"✓ Selected {len(selected_components)} components for detailed documentation\n")
-    
+
+    logger.info(f"✓ Selected {len(selected_components)} components for detailed documentation\n")
+
     for i, comp in enumerate(selected_components, 1):
-        print(f"  {i}. {comp['name']} ({comp['category']})")
-    
-    print(f"\n  + {len(honorable_mentions)} honorable mentions\n")
-    
+        logger.info(f"  {i}. {comp['name']} ({comp['category']})")
+
+    logger.info(f"\n  + {len(honorable_mentions)} honorable mentions\n")
+
     phase1_time = time.time() - phase1_start
-    print(f"Phase 1 complete: {format_duration(phase1_time)}\n")
+    logger.info(f"Phase 1 complete: {format_duration(phase1_time)}\n")
     
     # Phase 2: Generate Component Documentation
-    print("=" * 70)
-    print("PHASE 2: Generating Component Documentation")
-    print("=" * 70 + "\n")
+    logger.info("=" * 70)
+    logger.info("PHASE 2: Generating Component Documentation")
+    logger.info("=" * 70 + "\n")
     
     phase2_start = time.time()
     documented_components = []
     analysis_results = []  # collect per-component LLM results for metrics
     
     for i, comp in enumerate(selected_components, 1):
-        print(f"Component {i}/{len(selected_components)}: {comp['name']}")
-        print(f"  File: {comp['file_path']}")
-        
+        logger.info(f"Component {i}/{len(selected_components)}: {comp['name']}")
+        logger.info(f"  File: {comp['file_path']}")
+
         comp_start = time.time()
-        
+
         # Read component code
-        print("  → Reading source code...")
+        logger.info("  → Reading source code...")
         code = read_component_code(args.project_dir, comp['file_path'])
-        
+
         if not code:
-            print(f"  ✗ Could not read source code, skipping\n")
+            logger.error(f"  ✗ Could not read source code, skipping\n")
             continue
-        
-        print(f"  ✓ Source code loaded ({len(code)} chars)")
-        
+
+        logger.info(f"  ✓ Source code loaded ({len(code)} chars)")
+
         # Analyze component
-        print("  → Analyzing with LLM...")
+        logger.info("  → Analyzing with LLM...")
         analysis_prompt = build_component_analysis_prompt(args.project, comp, code)
         analysis_result = llm.call(analysis_prompt)
-        
+
         if not analysis_result:
-            print("  ✗ Analysis failed, skipping\n")
+            logger.error("  ✗ Analysis failed, skipping\n")
             continue
-        
+
         # Parse analysis
         component_data = parse_llm_json(analysis_result['content'])
-        
+
         if not component_data:
-            print("  ✗ Parse error, skipping\n")
+            logger.error("  ✗ Parse error, skipping\n")
             continue
-        
+
         component_data['file_path'] = comp['file_path']
-        
+
         # Generate markdown
-        print("  → Generating markdown...")
+        logger.info("  → Generating markdown...")
         component_md = generate_component_markdown(component_data, args.project)
-        
+
         # Write file
         output_filename = f"c4-level4-{comp['name']}.md"
         output_path = output_dir / output_filename
-        
+
         try:
             with open(output_path, 'w', encoding='utf-8') as f:
                 f.write(component_md)
         except Exception as e:
-            print(f"  ✗ Write error: {e}, skipping\n")
+            logger.error(f"  ✗ Write error: {e}, skipping\n")
             continue
-        
+
         comp_time = time.time() - comp_start
-        
-        print(f"  ✓ Written to {output_filename}")
-        print(f"  Cost: {format_cost(analysis_result['cost'])} | Time: {format_duration(comp_time)}\n")
-        
+
+        logger.info(f"  ✓ Written to {output_filename}")
+        logger.info(f"  Cost: {format_cost(analysis_result['cost'])} | Time: {format_duration(comp_time)}\n")
+
         documented_components.append(comp)
         analysis_results.append(analysis_result)
     
     phase2_time = time.time() - phase2_start
-    
+
     if not documented_components:
-        print("✗ Error: No components were successfully documented")
+        logger.error("✗ Error: No components were successfully documented")
         return 1
-    
-    print(f"Phase 2 complete: {format_duration(phase2_time)}")
-    print(f"Successfully documented {len(documented_components)}/{len(selected_components)} components\n")
-    
+
+    logger.info(f"Phase 2 complete: {format_duration(phase2_time)}")
+    logger.info(f"Successfully documented {len(documented_components)}/{len(selected_components)} components\n")
+
     # Generate hub document
-    print("Generating hub document...")
+    logger.info("Generating hub document...")
     hub_md = generate_hub_markdown(
         args.project,
         args.domain,
@@ -837,29 +835,29 @@ def main():
         honorable_mentions,
         rationale
     )
-    
+
     hub_path = output_dir / "c4-level4.md"
     try:
         with open(hub_path, 'w', encoding='utf-8') as f:
             f.write(hub_md)
-        print(f"✓ Hub document written to c4-level4.md\n")
+        logger.info(f"✓ Hub document written to c4-level4.md\n")
     except Exception as e:
-        print(f"✗ Error writing hub document: {e}")
+        logger.error(f"✗ Error writing hub document: {e}")
         return 1
     
     # === Canonical metrics v1.0 (usage-first) ===
     total_time = time.time() - start_time
     tracker.total_time = total_time  # keep tracker consistent for legacy print
-    
-    print("=" * 70)
-    print("Summary")
-    print("=" * 70 + "\n")
-    
-    print(f"Generated Files:")
-    print(f"  - c4-level4.md (hub document)")
+
+    logger.info("=" * 70)
+    logger.info("Summary")
+    logger.info("=" * 70 + "\n")
+
+    logger.info(f"Generated Files:")
+    logger.info(f"  - c4-level4.md (hub document)")
     for comp in documented_components:
-        print(f"  - c4-level4-{comp['name']}.md")
-    print(f"\nTotal: {len(documented_components) + 1} files\n")
+        logger.info(f"  - c4-level4-{comp['name']}.md")
+    logger.info(f"\nTotal: {len(documented_components) + 1} files\n")
     
     # Print cost summary (legacy, still useful in console)
     tracker.print_summary()
@@ -911,13 +909,13 @@ def main():
     metrics_file = output_dir / '.c4-level4-metrics.json'
     try:
         metrics_file.write_text(json.dumps(canonical_metrics, indent=2), encoding='utf-8')
-        print(f"✓ Metrics (v1.0) saved to {metrics_file}")
+        logger.info(f"✓ Metrics (v1.0) saved to {metrics_file}")
     except Exception as e:
-        print(f"⚠️  Warning: Could not save metrics: {e}")
-    
-    print(f"\n{'='*70}")
-    print(f"✓ C4 Level 4 documentation generated successfully!")
-    print(f"{'='*70}\n")
+        logger.warning(f"⚠ Warning: Could not save metrics: {e}")
+
+    logger.info(f"\n{'='*70}")
+    logger.info(f"✓ C4 Level 4 documentation generated successfully!")
+    logger.info(f"{'='*70}\n")
     
     return 0
 

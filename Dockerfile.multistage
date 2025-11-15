@@ -1,0 +1,132 @@
+# Multi-stage Docker build for optimized image size
+# Stage 1: Build stage with all build dependencies
+# Stage 2: Runtime stage with only runtime dependencies
+
+# =============================================================================
+# Stage 1: Builder - Install and compile dependencies
+# =============================================================================
+FROM ubuntu:22.04 AS builder
+
+# Avoid prompts during package installation
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install build dependencies
+RUN apt-get update && apt-get install -y \
+    git \
+    curl \
+    unzip \
+    wget \
+    python3 \
+    python3-pip \
+    php \
+    php-cli \
+    php-mbstring \
+    php-xml \
+    composer \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Node.js 20.x from NodeSource
+RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    && apt-get install -y nodejs \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Python analysis tools in virtual environment for easier copying
+RUN pip3 install --no-cache-dir \
+    pyan3 \
+    pylint \
+    networkx \
+    matplotlib \
+    pyyaml \
+    requests \
+    pydeps
+
+# Install JavaScript analysis tools (pinned versions)
+RUN npm install -g \
+    madge@6.1.0 \
+    dependency-cruiser@15.5.0 \
+    jsdoc@4.0.2 \
+    @mermaid-js/mermaid-cli@10.6.1
+
+# Install PHP analysis tools
+RUN composer global require \
+    phpstan/phpstan \
+    squizlabs/php_codesniffer \
+    qossmic/deptrac-shim \
+    structurizr-php/structurizr-php
+
+# =============================================================================
+# Stage 2: Runtime - Copy only necessary artifacts from builder
+# =============================================================================
+FROM ubuntu:22.04
+
+# Avoid prompts during package installation
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install only runtime dependencies (no build tools)
+RUN apt-get update && apt-get install -y \
+    git \
+    curl \
+    wget \
+    vim \
+    tree \
+    graphviz \
+    python3 \
+    python3-pip \
+    php \
+    php-cli \
+    php-mbstring \
+    php-xml \
+    composer \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Node.js 20.x from NodeSource
+RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    && apt-get install -y nodejs \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy Python packages from builder
+COPY --from=builder /usr/local/lib/python3.10/dist-packages /usr/local/lib/python3.10/dist-packages
+COPY --from=builder /usr/local/bin /usr/local/bin
+
+# Copy Node.js global packages from builder
+COPY --from=builder /usr/lib/node_modules /usr/lib/node_modules
+
+# Create symlinks for npm global binaries
+RUN ln -sf /usr/lib/node_modules/madge/bin/cli.js /usr/local/bin/madge && \
+    ln -sf /usr/lib/node_modules/dependency-cruiser/bin/dependency-cruise.mjs /usr/local/bin/dependency-cruise && \
+    ln -sf /usr/lib/node_modules/jsdoc/jsdoc.js /usr/local/bin/jsdoc && \
+    ln -sf /usr/lib/node_modules/@mermaid-js/mermaid-cli/src/cli.js /usr/local/bin/mmdc && \
+    chmod +x /usr/local/bin/madge /usr/local/bin/dependency-cruise /usr/local/bin/jsdoc /usr/local/bin/mmdc
+
+# Copy Composer global packages from builder
+COPY --from=builder /root/.config/composer /root/.config/composer
+
+# Add composer global bin to PATH
+ENV PATH="/root/.config/composer/vendor/bin:${PATH}"
+
+# Set working directory
+WORKDIR /workspace
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+    CMD python3 /workspace/scripts/health_check.py --exit-code || exit 1
+
+CMD ["/bin/bash"]
+
+# =============================================================================
+# Build instructions:
+#
+# Build the image:
+#   docker build -f Dockerfile.multistage -t flowscribe:multistage .
+#
+# Expected size reduction:
+#   - Original: ~500-600 MB
+#   - Multi-stage: ~400-500 MB
+#   - Alpine: ~100-200 MB
+#
+# Benefits:
+#   - Smaller final image size
+#   - No build tools in runtime image (improved security)
+#   - Faster deployments due to smaller size
+# =============================================================================

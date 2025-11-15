@@ -1,0 +1,169 @@
+# Pre-commit hooks configuration for Flowscribe
+# See https://pre-commit.com for more information
+# See https://pre-commit.com/hooks.html for more hooks
+
+# To install pre-commit hooks:
+#   pip install pre-commit
+#   pre-commit install
+#
+# To run manually on all files:
+#   pre-commit run --all-files
+#
+# To update hooks to latest versions:
+#   pre-commit autoupdate
+
+default_language_version:
+  python: python3.10
+
+repos:
+  # General file checks
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.5.0
+    hooks:
+      # Prevent large files from being committed
+      - id: check-added-large-files
+        args: ['--maxkb=500']
+      # Check for files that would conflict in case-insensitive filesystems
+      - id: check-case-conflict
+      # Check for merge conflicts
+      - id: check-merge-conflict
+      # Check YAML files for syntax errors
+      - id: check-yaml
+        args: ['--safe']
+      # Check JSON files for syntax errors
+      - id: check-json
+      # Check for files that contain merge conflict strings
+      - id: check-merge-conflict
+      # Ensure files end with a newline
+      - id: end-of-file-fixer
+      # Trim trailing whitespace
+      - id: trailing-whitespace
+        args: ['--markdown-linebreak-ext=md']
+      # Check for symlinks that point to nothing
+      - id: check-symlinks
+      # Check for executables with shebangs
+      - id: check-shebang-scripts-are-executable
+      # Detect private keys
+      - id: detect-private-key
+
+  # Python code formatting with Black
+  - repo: https://github.com/psf/black
+    rev: 23.12.1
+    hooks:
+      - id: black
+        name: Format Python code with Black
+        language_version: python3
+        args: ['--line-length=100']
+        files: \.py$
+
+  # Python import sorting with isort
+  - repo: https://github.com/pycqa/isort
+    rev: 5.13.2
+    hooks:
+      - id: isort
+        name: Sort Python imports
+        args: ['--profile', 'black', '--line-length', '100']
+        files: \.py$
+
+  # Python linting with pylint
+  - repo: https://github.com/pycqa/pylint
+    rev: v3.0.3
+    hooks:
+      - id: pylint
+        name: Lint Python code with pylint
+        args:
+          - '--max-line-length=100'
+          - '--disable=C0111,R0903,W0212,C0103'  # Disable some overly strict rules
+          - '--good-names=i,j,k,ex,_,e,f,fp'
+        files: \.py$
+        exclude: '^tests/'
+
+  # Python type checking with mypy
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.8.0
+    hooks:
+      - id: mypy
+        name: Type check Python code with mypy
+        args: ['--ignore-missing-imports', '--no-strict-optional']
+        files: \.py$
+        additional_dependencies: ['types-requests', 'types-PyYAML']
+
+  # Security checks with bandit
+  - repo: https://github.com/PyCQA/bandit
+    rev: 1.7.6
+    hooks:
+      - id: bandit
+        name: Security check with bandit
+        args: ['-c', 'pyproject.toml']
+        files: \.py$
+        exclude: '^tests/'
+
+  # Markdown linting
+  - repo: https://github.com/markdownlint/markdownlint
+    rev: v0.12.0
+    hooks:
+      - id: markdownlint
+        name: Lint Markdown files
+        args: ['--rules', '~MD013']  # Disable line length rule
+
+  # YAML linting
+  - repo: https://github.com/adrienverge/yamllint
+    rev: v1.33.0
+    hooks:
+      - id: yamllint
+        name: Lint YAML files
+        args: ['-d', '{extends: default, rules: {line-length: {max: 120}}}']
+
+  # Shell script linting
+  - repo: https://github.com/shellcheck-py/shellcheck-py
+    rev: v0.9.0.6
+    hooks:
+      - id: shellcheck
+        name: Lint shell scripts
+
+  # Dockerfile linting
+  - repo: https://github.com/hadolint/hadolint
+    rev: v2.12.1-beta
+    hooks:
+      - id: hadolint-docker
+        name: Lint Dockerfile
+        files: ^Dockerfile.*
+
+  # Check for secrets/credentials
+  - repo: https://github.com/Yelp/detect-secrets
+    rev: v1.4.0
+    hooks:
+      - id: detect-secrets
+        name: Detect secrets
+        args: ['--baseline', '.secrets.baseline']
+        exclude: package.lock.json
+
+  # Python docstring coverage (optional, can be strict)
+  - repo: https://github.com/econchick/interrogate
+    rev: 1.5.0
+    hooks:
+      - id: interrogate
+        name: Check Python docstring coverage
+        args: ['--fail-under=50', '--verbose']
+        files: ^scripts/.*\.py$
+
+# Exclude patterns for all hooks
+exclude: |
+  (?x)^(
+      \.git/.*|
+      \.venv/.*|
+      venv/.*|
+      __pycache__/.*|
+      \.pytest_cache/.*|
+      \.mypy_cache/.*|
+      output/.*|
+      projects/.*|
+      Core/.*|
+      .*\.egg-info/.*|
+      build/.*|
+      dist/.*
+  )$
+
+# CI mode - faster but less comprehensive
+# Set SKIP environment variable to skip certain hooks
+# Example: SKIP=pylint,mypy pre-commit run --all-files

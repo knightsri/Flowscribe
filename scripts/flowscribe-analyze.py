@@ -30,6 +30,9 @@ from pathlib import Path
 # Import shared utilities
 from flowscribe_utils import LLMClient, CostTracker, parse_llm_json, format_cost, format_duration
 from sanitize_output_files import sanitize_output_dir
+from logger import setup_logger
+
+logger = setup_logger(__name__)
 
 def get_directory_tree(path, max_depth=3, current_depth=0, ignore_dirs={'.git', 'node_modules', 'vendor', '.venv', '__pycache__'}):
     """
@@ -92,11 +95,11 @@ def generate_deptrac_config_with_llm(project_dir, project_name, domain, repo_url
     Returns:
         Tuple of (success: bool, yaml_content: str, metrics: dict)
     """
-    print("\n📊 Analyzing project structure...")
-    
+    logger.info("\n📊 Analyzing project structure...")
+
     # Get directory structure
     structure = get_directory_tree(project_dir, max_depth=3)
-    
+
     # Count PHP files for context
     php_files = []
     for root, dirs, files in os.walk(project_dir):
@@ -105,8 +108,8 @@ def generate_deptrac_config_with_llm(project_dir, project_name, domain, repo_url
         for file in files:
             if file.endswith('.php'):
                 php_files.append(os.path.join(root, file))
-    
-    print(f"  Found {len(php_files)} PHP files")
+
+    logger.info(f"  Found {len(php_files)} PHP files")
     
     prompt = f"""Analyze this PHP project and generate a deptrac.yaml configuration file.
 
@@ -213,7 +216,7 @@ deptrac:
             if not isinstance(parsed, dict) or 'deptrac' not in parsed:
                 raise ValueError("Generated YAML doesn't contain 'deptrac' key")
 
-            # Validate paths exist            
+            # Validate paths exist
             valid_paths = []
             paths = parsed.get('deptrac', {}).get('paths', [])
             for path in paths:
@@ -222,15 +225,15 @@ deptrac:
                 if full_path.exists():
                     valid_paths.append(path)
                 else:
-                    print(f"  ⚠ Removing non-existent path: {path}")
+                    logger.warning(f"  ⚠ Removing non-existent path: {path}")
                     
             # Update with only valid paths
             parsed['deptrac']['paths'] = valid_paths
             yaml_content = yaml.dump(parsed, default_flow_style=False)
 
         except Exception as e:
-            print(f"\n⚠ Warning: Generated YAML may be invalid: {e}")
-            print("Proceeding anyway...")
+            logger.warning(f"\n⚠ Warning: Generated YAML may be invalid: {e}")
+            logger.warning("Proceeding anyway...")
         
         # Build metrics dict from result
         metrics = {
@@ -242,9 +245,9 @@ deptrac:
         }
         
         return True, yaml_content, metrics
-        
+
     except Exception as e:
-        print(f"\n✗ Failed to generate deptrac config: {e}")
+        logger.error(f"\n✗ Failed to generate deptrac config: {e}")
         import traceback
         traceback.print_exc()
         return False, None, {}
@@ -343,15 +346,15 @@ class FlowscribeAnalyzer:
     
     def print_header(self, text):
         """Print a formatted header"""
-        print(f"\n{'='*70}")
-        print(f"{text}")
-        print(f"{'='*70}\n")
-    
+        logger.info(f"\n{'='*70}")
+        logger.info(f"{text}")
+        logger.info(f"{'='*70}\n")
+
     def print_step(self, step_num, total_steps, text):
         """Print a step indicator"""
-        print(f"\n{'='*70}")
-        print(f"[Step {step_num}/{total_steps}] {text}")
-        print('-' * 70)
+        logger.info(f"\n{'='*70}")
+        logger.info(f"[Step {step_num}/{total_steps}] {text}")
+        logger.info('-' * 70)
     
     def run_command(self, cmd_list, cwd=None, capture_output=True):
         """Run a command and return output
@@ -382,19 +385,19 @@ class FlowscribeAnalyzer:
     def check_project_exists(self):
         """Check if project directory exists (user should clone manually)"""
         if self.project_dir.exists():
-            print(f"✓ Found project directory: {self.project_dir}")
+            logger.info(f"✓ Found project directory: {self.project_dir}")
             return True
         else:
-            print(f"✗ Project directory not found: {self.project_dir}")
-            print(f"\n⚠️  Please clone the repository manually first:")
-            print(f"   cd {self.workspace_dir}")
-            print(f"   git clone {self.github_url}")
-            print(f"\n   Then run this script again.")
+            logger.error(f"✗ Project directory not found: {self.project_dir}")
+            logger.error(f"\n⚠ Please clone the repository manually first:")
+            logger.error(f"   cd {self.workspace_dir}")
+            logger.error(f"   git clone {self.github_url}")
+            logger.error(f"\n   Then run this script again.")
             return False
     
     def detect_project_metadata(self):
         """Use LLM to detect project name and domain from repository"""
-        print("Analyzing repository to detect project name and domain...")
+        logger.info("Analyzing repository to detect project name and domain...")
         
         step_start = time.time()
         
@@ -467,7 +470,7 @@ Provide ONLY the JSON, no other text."""
             # Fallback to repo name
             self.project_name = self.repo_name.replace('-', ' ').title()
             self.project_domain = "software"
-            print(f"⚠️  Using fallback: {self.project_name} / {self.project_domain}")
+            logger.warning(f"⚠ Using fallback: {self.project_name} / {self.project_domain}")
             return True
         
         # Parse response
@@ -479,11 +482,11 @@ Provide ONLY the JSON, no other text."""
             self.project_name = re.sub(r'[^a-zA-Z0-9 _-]', '', raw_name)
             self.project_domain = data.get('project_domain', 'software')
             description = data.get('description', 'N/A')
-            
-            print(f"✓ Detected project: {self.project_name}")
-            print(f"✓ Domain: {self.project_domain}")
-            print(f"✓ Description: {description}")
-            print(f"✓ Cost: {format_cost(result['cost'])} | Time: {format_duration(result['duration'])} | Tokens: {result['total_tokens']:,}")
+
+            logger.info(f"✓ Detected project: {self.project_name}")
+            logger.info(f"✓ Domain: {self.project_domain}")
+            logger.info(f"✓ Description: {description}")
+            logger.info(f"✓ Cost: {format_cost(result['cost'])} | Time: {format_duration(result['duration'])} | Tokens: {result['total_tokens']:,}")
             
             # Track cost
             self.costs['metadata_detection']['cost'] = result['cost']
@@ -492,14 +495,14 @@ Provide ONLY the JSON, no other text."""
             
             return True
         else:
-            print(f"⚠️  Could not parse LLM response, using fallback")
+            logger.warning(f"⚠ Could not parse LLM response, using fallback")
             self.project_name = self.repo_name.replace('-', ' ').title()
             self.project_domain = "software"
             return True
     
     def check_deptrac_config(self):
         """Generate deptrac configuration using LLM"""
-        print("Analyzing project structure and generating deptrac.yaml...")
+        logger.info("Analyzing project structure and generating deptrac.yaml...")
         
         step_start = time.time()
         
@@ -517,17 +520,17 @@ Provide ONLY the JSON, no other text."""
         )
             
         if not success or not yaml_content:
-            print("✗ Failed to generate deptrac.yaml")
-            print("  Cannot proceed without deptrac configuration")
+            logger.error("✗ Failed to generate deptrac.yaml")
+            logger.error("  Cannot proceed without deptrac configuration")
             return False
         
         # Save generated config
         deptrac_config_path = self.project_dir / "deptrac.yaml"
         with open(deptrac_config_path, 'w') as f:
             f.write(yaml_content)
-        
-        print(f"✓ Generated deptrac.yaml for {self.project_name}")
-        print(f"✓ Saved to {deptrac_config_path}")
+
+        logger.info(f"✓ Generated deptrac.yaml for {self.project_name}")
+        logger.info(f"✓ Saved to {deptrac_config_path}")
         
         step_time = time.time() - step_start
         
@@ -535,8 +538,8 @@ Provide ONLY the JSON, no other text."""
         self.costs['deptrac_generation']['cost'] = gen_metrics.get('cost', 0)
         self.costs['deptrac_generation']['time'] = gen_metrics.get('duration', 0)
         self.costs['deptrac_generation']['tokens'] = gen_metrics.get('total_tokens', 0)
-        
-        print(f"✓ Cost: ${gen_metrics.get('cost', 0):.5f} | Time: {gen_metrics.get('duration', 0):.1f}s | Tokens: {gen_metrics.get('total_tokens', 0):,}")
+
+        logger.info(f"✓ Cost: ${gen_metrics.get('cost', 0):.5f} | Time: {gen_metrics.get('duration', 0):.1f}s | Tokens: {gen_metrics.get('total_tokens', 0):,}")
         
         return True
     
@@ -561,13 +564,13 @@ Provide ONLY the JSON, no other text."""
         # Default if nothing found
         if not found_dirs:
             found_dirs = ['src', 'app', 'lib']
-        
-        print(f"  Detected code directories: {', '.join(found_dirs)}")
+
+        logger.info(f"  Detected code directories: {', '.join(found_dirs)}")
         return found_dirs
     
     def run_deptrac_analysis(self):
         """Run deptrac analysis"""
-        print("Running deptrac dependency analysis...")
+        logger.info("Running deptrac dependency analysis...")
 
         deptrac_output = self.output_dir / 'deptrac-report.json'
         deptrac_config = self.project_dir / 'deptrac.yaml'
@@ -589,14 +592,14 @@ Provide ONLY the JSON, no other text."""
             try:
                 with open(deptrac_output, 'r') as f:
                     data = json.load(f)
-                print(f"✓ Deptrac analysis complete: {deptrac_output}")
-                print(f"  Found {len(data.get('files', {}))} files with violations")
+                logger.info(f"✓ Deptrac analysis complete: {deptrac_output}")
+                logger.info(f"  Found {len(data.get('files', {}))} files with violations")
                 return True
             except json.JSONDecodeError:
-                print(f"✗ Deptrac report exists but is invalid JSON")
+                logger.error(f"✗ Deptrac report exists but is invalid JSON")
                 return False
         else:
-            print(f"✗ Deptrac analysis failed: {stderr}")
+            logger.error(f"✗ Deptrac analysis failed: {stderr}")
             return False
     
     def generate_architecture_review(self):
@@ -608,19 +611,19 @@ Provide ONLY the JSON, no other text."""
             "--project", self.project_name,
             "--domain", self.project_domain,
             "--output-dir", str(self.output_dir),
-            "--api-key", self.api_key,
             "--model", review_model
         ]
-        
+
+        # Note: API key is passed via OPENROUTER_API_KEY environment variable
         return self.run_script("c4-architecture-review.py", args, "Architecture review")
 
     def run_script(self, script_name, args, step_name):
         """Run a Python script and capture output"""
         scripts_dir = Path(__file__).parent
         script_path = scripts_dir / script_name
-        
+
         if not script_path.exists():
-            print(f"✗ Script not found: {script_path}")
+            logger.error(f"✗ Script not found: {script_path}")
             return False
         
         # Build command as list (no shell quoting needed)
@@ -628,12 +631,12 @@ Provide ONLY the JSON, no other text."""
             "python3",
             str(script_path)
         ] + [str(arg) for arg in args]
-        
-        print(f"Running: {script_name}")
-        #print(f"Command: {' '.join(cmd_list)}")  # Just for display
+
+        logger.info(f"Running: {script_name}")
+        #logger.info(f"Command: {' '.join(cmd_list)}")  # Just for display
         # Better display with proper quoting
         import shlex
-        print(f"Command: {' '.join(shlex.quote(str(x)) for x in cmd_list)}")
+        logger.debug(f"Command: {' '.join(shlex.quote(str(x)) for x in cmd_list)}")
 
         try:
             result = subprocess.run(
@@ -644,20 +647,20 @@ Provide ONLY the JSON, no other text."""
             )
             
             if result.returncode == 0:
-                print(f"✓ {step_name} complete")
+                logger.info(f"✓ {step_name} complete")
                 return True
             else:
-                print(f"✗ {step_name} failed")
-                print(f"STDOUT: {result.stdout}")  
-                print(f"STDERR: {result.stderr}")  
+                logger.error(f"✗ {step_name} failed")
+                logger.error(f"STDOUT: {result.stdout}")
+                logger.error(f"STDERR: {result.stderr}")
                 if result.stderr:
-                    print(f"Error: {result.stderr}")
+                    logger.error(f"Error: {result.stderr}")
                 return False
         except subprocess.TimeoutExpired:
-            print(f"✗ {step_name} timed out")
+            logger.error(f"✗ {step_name} timed out")
             return False
         except Exception as e:
-            print(f"✗ {step_name} error: {e}")
+            logger.error(f"✗ {step_name} error: {e}")
             return False
     
     def generate_level1(self):
@@ -666,11 +669,11 @@ Provide ONLY the JSON, no other text."""
             str(self.project_dir),
             "--project", self.project_name,
             "--domain", self.project_domain,
-            "--api-key", self.api_key,
             "--model", self.model,
             "--output", str(self.output_dir / "c4-level1.md")
         ]
-        
+
+        # Note: API key is passed via OPENROUTER_API_KEY environment variable
         return self.run_script("c4-level1-generator.py", args, "Level 1 generation")
     
     def generate_level2(self):
@@ -702,12 +705,12 @@ Provide ONLY the JSON, no other text."""
             str(self.output_dir / "deptrac-report.json"),
             "--project", self.project_name,
             "--domain", self.project_domain,
-            "--api-key", self.api_key,
             "--model", self.model,
             "--output-dir", str(self.output_dir),
             "--max-components", "12"
         ]
-        
+
+        # Note: API key is passed via OPENROUTER_API_KEY environment variable
         return self.run_script("c4-level4-generator.py", args, "Level 4 generation")
     
     def generate_master_index(self):
@@ -727,46 +730,46 @@ Provide ONLY the JSON, no other text."""
         
         total_cost = sum(step['cost'] for step in self.costs.values())
         total_tokens = sum(step['tokens'] for step in self.costs.values())
-        
+
         self.print_header("Analysis Complete!")
-        
-        print(f"Project: {self.project_name}")
-        print(f"Domain: {self.project_domain}")
-        print(f"Repository: {self.github_url}")
-        print(f"Output Directory: {self.output_dir}")
-        print()
-        
-        print("Generated Documentation:")
-        print(f"  ✓ C4 Level 1 (System Context)")
-        print(f"  ✓ C4 Level 2 (Containers)")
-        print(f"  ✓ C4 Level 3 (Components - all layers)")
-        print(f"  ✓ C4 Level 4 (Code - selective)")
-        print(f"  ✓ Master Index (README.md)")
-        print()
-        
-        print("Performance Metrics:")
-        print(f"  Total Time:    {total_time/60:.1f} minutes ({total_time:.1f}s)")
-        print(f"  Total Cost:    ${total_cost:.4f}")
-        print(f"  Total Tokens:  {total_tokens:,}")
-        print(f"  Model:         {self.model}")
-        print()
-        
-        print("Cost & Time Breakdown:")
-        print(f"  {'Step':<25s} {'Cost':>10s} {'Time':>10s} {'Tokens':>10s}")
-        print(f"  {'-'*25} {'-'*10} {'-'*10} {'-'*10}")
+
+        logger.info(f"Project: {self.project_name}")
+        logger.info(f"Domain: {self.project_domain}")
+        logger.info(f"Repository: {self.github_url}")
+        logger.info(f"Output Directory: {self.output_dir}")
+        logger.info("")
+
+        logger.info("Generated Documentation:")
+        logger.info(f"  ✓ C4 Level 1 (System Context)")
+        logger.info(f"  ✓ C4 Level 2 (Containers)")
+        logger.info(f"  ✓ C4 Level 3 (Components - all layers)")
+        logger.info(f"  ✓ C4 Level 4 (Code - selective)")
+        logger.info(f"  ✓ Master Index (README.md)")
+        logger.info("")
+
+        logger.info("Performance Metrics:")
+        logger.info(f"  Total Time:    {total_time/60:.1f} minutes ({total_time:.1f}s)")
+        logger.info(f"  Total Cost:    ${total_cost:.4f}")
+        logger.info(f"  Total Tokens:  {total_tokens:,}")
+        logger.info(f"  Model:         {self.model}")
+        logger.info("")
+
+        logger.info("Cost & Time Breakdown:")
+        logger.info(f"  {'Step':<25s} {'Cost':>10s} {'Time':>10s} {'Tokens':>10s}")
+        logger.info(f"  {'-'*25} {'-'*10} {'-'*10} {'-'*10}")
         for step, metrics in self.costs.items():
             if metrics['cost'] > 0 or metrics['time'] > 0:
                 step_name = step.replace('_', ' ').title()
-                print(f"  {step_name:<25s} ${metrics['cost']:>9.4f} {metrics['time']:>9.1f}s {metrics['tokens']:>10,d}")
-        print(f"  {'-'*25} {'-'*10} {'-'*10} {'-'*10}")
-        print(f"  {'TOTAL':<25s} ${total_cost:>9.4f} {total_time:>9.1f}s {total_tokens:>10,d}")
-        print()
-        
-        print("Next Steps:")
-        print(f"  1. Open {self.output_dir / 'README.md'}")
-        print(f"  2. Review the complete C4 documentation")
-        print(f"  3. Share with your team!")
-        print()
+                logger.info(f"  {step_name:<25s} ${metrics['cost']:>9.4f} {metrics['time']:>9.1f}s {metrics['tokens']:>10,d}")
+        logger.info(f"  {'-'*25} {'-'*10} {'-'*10} {'-'*10}")
+        logger.info(f"  {'TOTAL':<25s} ${total_cost:>9.4f} {total_time:>9.1f}s {total_tokens:>10,d}")
+        logger.info("")
+
+        logger.info("Next Steps:")
+        logger.info(f"  1. Open {self.output_dir / 'README.md'}")
+        logger.info(f"  2. Review the complete C4 documentation")
+        logger.info(f"  3. Share with your team!")
+        logger.info("")
         
         # Save metrics to file
         metrics_file = self.output_dir / '.flowscribe-metrics.json'
@@ -784,18 +787,18 @@ Provide ONLY the JSON, no other text."""
         
         with open(metrics_file, 'w') as f:
             json.dump(metrics_data, f, indent=2)
-        
-        print(f"Metrics saved to: {metrics_file}")
-        print()
+
+        logger.info(f"Metrics saved to: {metrics_file}")
+        logger.info("")
     
     def run(self):
         """Run the complete analysis pipeline"""
         self.print_header(f"Flowscribe: Automated C4 Documentation Generator")
-        
-        print(f"Repository: {self.github_url}")
-        print(f"Project Directory: {self.project_dir}")
-        print(f"Output: {self.output_dir}")
-        print()
+
+        logger.info(f"Repository: {self.github_url}")
+        logger.info(f"Project Directory: {self.project_dir}")
+        logger.info(f"Output: {self.output_dir}")
+        logger.info("")
         
         # Create output directory
         self.output_dir.mkdir(parents=True, exist_ok=True)
@@ -826,7 +829,7 @@ Provide ONLY the JSON, no other text."""
         # Step 5: Generate C4 Level 1
         self.print_step(5, 8, "Generate C4 Level 1 (System Context)")
         if not self.generate_level1():
-            print("⚠️  Level 1 generation failed, but continuing...")
+            logger.warning("⚠ Level 1 generation failed, but continuing...")
         
         # Step 6: Generate C4 Level 2
         self.print_step(6, 8, "Generate C4 Level 2 (Containers)")
@@ -837,7 +840,7 @@ Provide ONLY the JSON, no other text."""
         self.print_step(7, 8, "Generate C4 Level 3 (Components)")
 
         # First, Check which layers actually have components
-        print("\nChecking which layers have components...")
+        logger.info("\nChecking which layers have components...")
         deptrac_json = self.output_dir / "deptrac-report.json"
         deptrac_yaml = self.project_dir / "deptrac.yaml"
         layers_to_generate = []
@@ -847,9 +850,9 @@ Provide ONLY the JSON, no other text."""
             import yaml
             with open(deptrac_yaml, 'r') as f:
                 deptrac_config = yaml.safe_load(f)
-            
+
             all_layers = [layer['name'] for layer in deptrac_config.get('deptrac', {}).get('layers', [])]
-            print(f"Layers defined: {', '.join(all_layers)}")
+            logger.info(f"Layers defined: {', '.join(all_layers)}")
             
             # For each layer, count PHP files matching its collectors
             layer_counts = {}
@@ -874,48 +877,48 @@ Provide ONLY the JSON, no other text."""
                 layer_counts[layer_name] = count
                 if count > 0:
                     layers_to_generate.append(layer_name)
-                    print(f"  ✓ {layer_name}: {count} PHP files")
+                    logger.info(f"  ✓ {layer_name}: {count} PHP files")
                 else:
-                    print(f"  ⊘ {layer_name}: 0 PHP files (skipping)")
-            
+                    logger.info(f"  ⊘ {layer_name}: 0 PHP files (skipping)")
+
         except Exception as e:
-            print(f"⚠️  Could not analyze layers: {e}")
+            logger.warning(f"⚠ Could not analyze layers: {e}")
             import traceback
             traceback.print_exc()
             # Fallback: generate all layers
             layers_to_generate = all_layers if 'all_layers' in locals() else ['Presentation', 'Infrastructure', 'Persistence', 'Domain']
 
-        print(f"\nGenerating {len(layers_to_generate)} layers...")
+        logger.info(f"\nGenerating {len(layers_to_generate)} layers...")
 
         for layer in layers_to_generate:
-            print(f"\nGenerating {layer} layer...")
+            logger.info(f"\nGenerating {layer} layer...")
             if not self.generate_level3(layer):
-                print(f"⚠️  {layer} layer generation failed, but continuing...")
+                logger.warning(f"⚠ {layer} layer generation failed, but continuing...")
         
         # Step 8: Generate C4 Level 4
         self.print_step(8, 8, "Generate C4 Level 4 (Code)")
         if not self.generate_level4():
-            print("⚠️  Level 4 generation failed, but continuing...")
-        
+            logger.warning("⚠ Level 4 generation failed, but continuing...")
+
         # Step 9: Generate Architecture Review
         self.print_step(9, 9, "Generate Architecture Review")
         if not self.generate_architecture_review():
-            print("⚠️  Architecture review failed, but continuing...")
-        
+            logger.warning("⚠ Architecture review failed, but continuing...")
+
         # Step 10: Generate Master Index
-        print("\nGenerating Master Index...")
+        logger.info("\nGenerating Master Index...")
         if not self.generate_master_index():
-            print("⚠️  Master index generation failed")
+            logger.warning("⚠ Master index generation failed")
 
 
 
         # Post-process: sanitize filenames and fix links (no spaces)
         try:
-            print('\nSanitizing output filenames and fixing links...')
+            logger.info('\nSanitizing output filenames and fixing links...')
             summary = sanitize_output_dir(str(self.output_dir))
-            print(f"✓ Sanitization complete: renamed {summary['renamed']} file(s)")
+            logger.info(f"✓ Sanitization complete: renamed {summary['renamed']} file(s)")
         except Exception as e:
-            print(f"⚠️  Sanitization skipped due to error: {e}")
+            logger.warning(f"⚠ Sanitization skipped due to error: {e}")
 
         # Summary
         self.print_summary()
@@ -967,25 +970,20 @@ Prerequisites:
         default='/workspace/output',
         help='Base output directory (default: /workspace/output)'
     )
-    
-    parser.add_argument(
-        '--api-key',
-        default=os.environ.get('OPENROUTER_API_KEY'),
-        help='OpenRouter API key (or set OPENROUTER_API_KEY env var)'
-    )
-    
+
     parser.add_argument(
         '--model',
         default=os.environ.get('OPENROUTER_MODEL', 'anthropic/claude-sonnet-4-20250514'),
         help='Model to use (default: claude-sonnet-4-20250514)'
     )
-    
+
     args = parser.parse_args()
-    
-    # Validate
-    if not args.api_key:
-        print("✗ Error: OpenRouter API key required")
-        print("Set OPENROUTER_API_KEY environment variable or use --api-key")
+
+    # Get API key from environment only
+    api_key = os.environ.get('OPENROUTER_API_KEY')
+    if not api_key:
+        logger.error("✗ Error: OpenRouter API key required")
+        logger.error("Set OPENROUTER_API_KEY environment variable")
         sys.exit(1)
     
     # Create analyzer
@@ -993,7 +991,7 @@ Prerequisites:
         github_url=args.github_url,
         workspace_dir=args.workspace,
         output_base_dir=args.output,
-        api_key=args.api_key,
+        api_key=api_key,
         model=args.model
     )
     

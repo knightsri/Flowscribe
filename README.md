@@ -5,6 +5,81 @@ Flowscribe automates generation, visualization, and review of multi-level C4 arc
 It integrates static analysis (Deptrac), dynamic LLM review (context-aware prompts), and cost tracking (usage-first accounting)
 to produce end-to-end architecture insights.
 
+## Project Structure
+
+```
+Flowscribe/
+├── .github/              # GitHub Actions workflows and templates
+│   └── workflows/        # CI/CD pipeline definitions
+├── docs/                 # Documentation
+│   ├── CODING_STANDARDS.md  # Coding standards and best practices
+│   ├── prompts/          # LLM prompts for architecture analysis
+│   └── TODO.md           # Development tasks and roadmap
+├── scripts/              # Main application scripts
+│   ├── c4-level1-generator.py      # C4 Level 1 (System Context) generator
+│   ├── c4-level2-generator.py      # C4 Level 2 (Container) generator
+│   ├── c4-level3-generator.py      # C4 Level 3 (Component) generator
+│   ├── c4-level4-generator.py      # C4 Level 4 (Code) generator
+│   ├── c4-architecture-review.py   # Architecture review generator
+│   ├── create-master-index.py      # Master index aggregator
+│   ├── flowscribe-analyze.py       # Main orchestration script
+│   ├── flowscribe_utils.py         # Shared utilities (LLM client, cost tracking)
+│   ├── logger.py                   # Logging configuration
+│   ├── constants.py                # Centralized constants
+│   ├── error_sanitizer.py          # Error message sanitization
+│   ├── config_validator.py         # Configuration validation
+│   └── sanitize_output_files.py    # Output file sanitizer
+├── tests/                # Test suite
+│   ├── unit/             # Unit tests
+│   ├── integration/      # Integration tests
+│   └── conftest.py       # Pytest configuration
+├── .env.example          # Example environment variables
+├── .gitignore            # Git ignore patterns
+├── CHANGELOG.md          # Version history and changes
+├── CODE_QUALITY_IMPROVEMENTS_SUMMARY.md  # Code quality tracking
+├── CONTRIBUTING.md       # Contribution guidelines
+├── Dockerfile            # Docker container definition
+├── docker-compose.yml    # Docker Compose configuration
+├── LICENSE               # MIT License
+├── README.md             # This file
+├── requirements.txt      # Python dependencies
+├── requirements-dev.txt  # Development dependencies
+├── SECURITY.md           # Security policy
+├── Setup.md              # Setup and installation guide
+└── Task-List.md          # Project task tracking
+```
+
+### Key Directories
+
+- **`scripts/`**: Contains all Flowscribe Python scripts for C4 generation and analysis
+- **`tests/`**: Comprehensive test suite with unit and integration tests
+- **`docs/`**: Project documentation including coding standards and prompts
+- **`.github/`**: CI/CD workflows and GitHub configuration
+
+### Typical Project Locations
+
+When analyzing projects, Flowscribe uses the following default paths:
+
+- **Workspace directory**: `/workspace/projects/` (configurable via `--workspace`)
+- **Output directory**: `/workspace/output/` (configurable via `--output`)
+- **Clone location**: `{workspace}/{project-name}/`
+- **Generated docs**: `{output}/{project-name}/`
+
+Example:
+```bash
+# Project is cloned to:
+/workspace/projects/WordPress/
+
+# Documentation is generated in:
+/workspace/output/WordPress/
+├── c4-level1.md
+├── c4-level2.md
+├── c4-level3-*.md
+├── c4-level4.md
+├── architecture-review.md
+└── master-index.md
+```
+
 ## Core Features
 - Automated C4 Level 1–4 document generation
 - AI-driven architecture review using premium LLMs (Sonnet 4.5, Xi Fast Code)

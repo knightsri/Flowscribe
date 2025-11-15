@@ -13,6 +13,10 @@ import argparse
 from pathlib import Path
 from datetime import datetime
 import collections
+from logger import setup_logger
+from constants import MAX_VIOLATION_ROWS, MAX_FILES_PER_CELL
+
+logger = setup_logger(__name__)
 
 SCHEMA_VERSION = "1.0"
 LEVEL_KEY = "level2"
@@ -126,7 +130,7 @@ class DeptracToC4Converter:
                 "line": v.get("line"),
             }
 
-    def _build_violation_summary(self, max_rows=100, max_files_per_cell=3):
+    def _build_violation_summary(self, max_rows=MAX_VIOLATION_ROWS, max_files_per_cell=MAX_FILES_PER_CELL):
         rows = list(self._iter_violations())
         by_pair = collections.Counter((r["from_layer"], r["to_layer"]) for r in rows)
         by_rule = collections.Counter(r["rule"] for r in rows)
@@ -171,7 +175,7 @@ class DeptracToC4Converter:
         }
         return summary
 
-    def _render_violation_section(self, outdir: Path, max_rows=100, max_files_per_cell=3) -> str:
+    def _render_violation_section(self, outdir: Path, max_rows=MAX_VIOLATION_ROWS, max_files_per_cell=MAX_FILES_PER_CELL) -> str:
         outdir.mkdir(parents=True, exist_ok=True)
         summary = self._build_violation_summary(max_rows, max_files_per_cell)
         self.violations_sidecar = summary["sidecar"]
@@ -234,7 +238,7 @@ class DeptracToC4Converter:
         # Optional: remove leading slashes
         return path_str.lstrip("/")
 
-    def generate_markdown_report(self, outdir: Path, max_rows=100, max_files_per_cell=3) -> str:
+    def generate_markdown_report(self, outdir: Path, max_rows=MAX_VIOLATION_ROWS, max_files_per_cell=MAX_FILES_PER_CELL) -> str:
         doc = []
         doc.append(f"# {self.project_name} - C4 Level 2: Container Architecture")
         doc.append("")
@@ -275,54 +279,59 @@ def main():
     parser.add_argument("--project", required=True, help='Project name (e.g., "WordPress")')
     parser.add_argument("--output", "-o", required=True, help="Markdown output path")
     parser.add_argument("--model", default="none", help="Model name for metrics (default: none, since no LLM used)")
-    parser.add_argument("--max-violations-table", type=int, default=100, help="Max rows in the violations table")
-    parser.add_argument("--max-files-per-cell", type=int, default=3, help="Max file samples per table cell")
+    parser.add_argument("--max-violations-table", type=int, default=MAX_VIOLATION_ROWS, help="Max rows in the violations table")
+    parser.add_argument("--max-files-per-cell", type=int, default=MAX_FILES_PER_CELL, help="Max file samples per table cell")
+    parser.add_argument('--debug', action='store_true', help='Enable debug logging')
     args = parser.parse_args()
+
+    if args.debug:
+        from logger import set_debug_mode
+        set_debug_mode(logger, debug=True)
 
     # Security: Validate and resolve paths to prevent directory traversal
     try:
         deptrac_json = Path(args.deptrac_json).resolve()
         output_path = Path(args.output).resolve()
     except (ValueError, OSError) as e:
-        print(f"✗ Error: Invalid path: {e}")
+        logger.error(f"✗ Error: Invalid path: {e}")
         return 1
 
     # Security: Check for directory traversal attempts
     if '..' in Path(args.deptrac_json).parts:
-        print("✗ Error: Invalid deptrac path - directory traversal detected")
+        logger.error("✗ Error: Invalid deptrac path - directory traversal detected")
         return 1
 
     if '..' in Path(args.output).parts:
-        print("✗ Error: Invalid output path - directory traversal detected")
+        logger.error("✗ Error: Invalid output path - directory traversal detected")
         return 1
 
     # Check deptrac file exists
     if not deptrac_json.exists():
-        print(f"✗ Error: Deptrac report not found: {deptrac_json}")
+        logger.error(f"✗ Error: Deptrac report not found: {deptrac_json}")
         return 1
 
     # Update args with validated paths
     args.deptrac_json = str(deptrac_json)
     args.output = str(output_path)
 
-    print("Step 1: Loading and parsing Deptrac report...")
+    logger.info("Step 1: Loading and parsing Deptrac report...")
     t0 = time.time()
     converter = DeptracToC4Converter(args.deptrac_json, args.project, args.model)
     parse_time = time.time() - t0
-    print(f"✓ Parsed in {format_duration(parse_time)}")
+    logger.info(f"✓ Parsed in {format_duration(parse_time)}")
 
-    print("Step 2: Generating markdown...")
+    logger.info("Step 2: Generating markdown...")
     t1 = time.time()
     out_path = Path(args.output)
     outdir = out_path.parent
     outdir.mkdir(parents=True, exist_ok=True)
     markdown = converter.generate_markdown_report(outdir, args.max_violations_table, args.max_files_per_cell)
     gen_time = time.time() - t1
-    print(f"✓ Generated in {format_duration(gen_time)}")
+    logger.info(f"✓ Generated in {format_duration(gen_time)}")
 
-    print("Step 3: Writing output...")
+    logger.info("Step 3: Writing output...")
     out_path.write_text(markdown, encoding="utf-8")
-    print(f"✓ Written to {out_path}")
+    logger.info(f"✓ Written to {out_path}")
 
     # Canonical metrics (no LLM usage here)
     total_time = round(parse_time + gen_time, 3)
@@ -358,9 +367,9 @@ def main():
         }
     }
     (outdir / ".c4-level2-metrics.json").write_text(json.dumps(metrics, indent=2), encoding="utf-8")
-    print(f"✓ Metrics (v{SCHEMA_VERSION}) saved to {outdir / '.c4-level2-metrics.json'}")
+    logger.info(f"✓ Metrics (v{SCHEMA_VERSION}) saved to {outdir / '.c4-level2-metrics.json'}")
 
-    print("All done.")
+    logger.info("All done.")
     return 0
 
 
