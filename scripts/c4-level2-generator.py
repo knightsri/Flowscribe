@@ -57,7 +57,9 @@ class DeptracToC4Converter:
 
     # -------- Deptrac parsing --------
     def _load(self, path: Path) -> None:
-        obj = json.loads(path.read_text(encoding="utf-8"))
+        # Security: Resolve path to absolute (already validated in main, but double-check)
+        resolved_path = path.resolve()
+        obj = json.loads(resolved_path.read_text(encoding="utf-8"))
         # format 1: {"violations":[ ... {"rule": "...", "depender": {"layer": "...", "file": "...", "line": n}, "dependent": {"layer": "...", ...}} ]}
         if isinstance(obj, dict) and "violations" in obj and isinstance(obj["violations"], list):
             for v in obj["violations"]:
@@ -277,9 +279,31 @@ def main():
     parser.add_argument("--max-files-per-cell", type=int, default=3, help="Max file samples per table cell")
     args = parser.parse_args()
 
-    if not Path(args.deptrac_json).exists():
-        print(f"✗ Error: Deptrac report not found: {args.deptrac_json}")
+    # Security: Validate and resolve paths to prevent directory traversal
+    try:
+        deptrac_json = Path(args.deptrac_json).resolve()
+        output_path = Path(args.output).resolve()
+    except (ValueError, OSError) as e:
+        print(f"✗ Error: Invalid path: {e}")
         return 1
+
+    # Security: Check for directory traversal attempts
+    if '..' in Path(args.deptrac_json).parts:
+        print("✗ Error: Invalid deptrac path - directory traversal detected")
+        return 1
+
+    if '..' in Path(args.output).parts:
+        print("✗ Error: Invalid output path - directory traversal detected")
+        return 1
+
+    # Check deptrac file exists
+    if not deptrac_json.exists():
+        print(f"✗ Error: Deptrac report not found: {deptrac_json}")
+        return 1
+
+    # Update args with validated paths
+    args.deptrac_json = str(deptrac_json)
+    args.output = str(output_path)
 
     print("Step 1: Loading and parsing Deptrac report...")
     t0 = time.time()

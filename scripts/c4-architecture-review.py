@@ -31,8 +31,16 @@ LEVEL_KEY = "architecture_review"
 SCHEMA_VERSION = "1.0"
 
 def read_c4_documentation(output_dir):
-    """Read all generated C4 documentation files"""
-    output_path = Path(output_dir)
+    """Read all generated C4 documentation files
+
+    Args:
+        output_dir: Path to output directory (validated for security)
+
+    Returns:
+        Dictionary of documentation files and content
+    """
+    # Security: Use resolved absolute path (already validated in main)
+    output_path = Path(output_dir).resolve()
     docs = {}
     
     # Files to read
@@ -351,7 +359,28 @@ def main():
         help='Model to use for review (default: Claude Sonnet 4.5)'
     )
     args = parser.parse_args()
-    
+
+    # Security: Validate and resolve paths to prevent directory traversal
+    try:
+        output_dir = Path(args.output_dir).resolve()
+    except (ValueError, OSError) as e:
+        print(f"✗ Error: Invalid path: {e}")
+        return 1
+
+    # Security: Check for directory traversal attempts
+    if '..' in Path(args.output_dir).parts:
+        print("✗ Error: Invalid output directory - directory traversal detected")
+        return 1
+
+    # Check output directory exists
+    if not output_dir.exists():
+        print(f"✗ Error: Output directory not found: {output_dir}")
+        print("Make sure to run the C4 generators first")
+        return 1
+
+    # Update args with validated path
+    args.output_dir = str(output_dir)
+
     metrics = generate_review(
         args.project,
         args.domain,

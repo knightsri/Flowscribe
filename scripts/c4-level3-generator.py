@@ -25,8 +25,17 @@ class C4Level3Generator:
     """Generate C4 Level 3 component diagrams"""
     
     def __init__(self, deptrac_report_path, project_dir=None, model="none"):
-        self.report_path = Path(deptrac_report_path)
-        self.project_dir = Path(project_dir) if project_dir else self.report_path.parent.parent / 'projects' / self.report_path.parent.name
+        # Security: Resolve paths to absolute and validate
+        self.report_path = Path(deptrac_report_path).resolve()
+
+        if project_dir:
+            proj_path = Path(project_dir).resolve()
+            # Security: Check for directory traversal
+            if '..' in Path(project_dir).parts:
+                raise ValueError("Invalid project directory: directory traversal detected")
+            self.project_dir = proj_path
+        else:
+            self.project_dir = self.report_path.parent.parent / 'projects' / self.report_path.parent.name
         
         # Cost tracker (no LLM calls in basic mode, but tracks time)
         self.tracker = CostTracker(model)
@@ -521,12 +530,45 @@ def main():
 
 
     args = parser.parse_args()
-    
-    # Validate inputs
-    if not Path(args.deptrac_report).exists():
-        print(f"✗ Error: Deptrac report not found: {args.deptrac_report}")
+
+    # Security: Validate and resolve paths to prevent directory traversal
+    try:
+        deptrac_report = Path(args.deptrac_report).resolve()
+        output_path = Path(args.output).resolve()
+
+        # Validate project_dir if provided
+        if args.project_dir:
+            project_dir = Path(args.project_dir).resolve()
+        else:
+            project_dir = None
+    except (ValueError, OSError) as e:
+        print(f"✗ Error: Invalid path: {e}")
+        return 1
+
+    # Security: Check for directory traversal attempts
+    if '..' in Path(args.deptrac_report).parts:
+        print("✗ Error: Invalid deptrac report path - directory traversal detected")
+        return 1
+
+    if '..' in Path(args.output).parts:
+        print("✗ Error: Invalid output path - directory traversal detected")
+        return 1
+
+    if args.project_dir and '..' in Path(args.project_dir).parts:
+        print("✗ Error: Invalid project directory - directory traversal detected")
+        return 1
+
+    # Check deptrac report exists
+    if not deptrac_report.exists():
+        print(f"✗ Error: Deptrac report not found: {deptrac_report}")
         print(f"\n⚠️  Make sure you've run deptrac analysis first")
         return 1
+
+    # Update args with validated paths
+    args.deptrac_report = str(deptrac_report)
+    args.output = str(output_path)
+    if project_dir:
+        args.project_dir = str(project_dir)
     
     print(f"\n{'='*60}")
     print(f"C4 Level 3 Generator - Component Diagram")

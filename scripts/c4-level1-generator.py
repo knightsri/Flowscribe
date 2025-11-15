@@ -24,7 +24,15 @@ SCHEMA_VERSION = "1.0"
 
 
 def read_project_files(project_dir, max_file_size=50000):
-    """Read relevant project files for context analysis"""
+    """Read relevant project files for context analysis
+
+    Args:
+        project_dir: Path to project directory (validated for security)
+        max_file_size: Maximum file size to read
+
+    Returns:
+        Dictionary of filename -> content
+    """
     files_content = {}
 
     target_patterns = [
@@ -45,7 +53,8 @@ def read_project_files(project_dir, max_file_size=50000):
         'app.config.js',
     ]
 
-    project_path = Path(project_dir)
+    # Security: Use resolved absolute path (already validated in main)
+    project_path = Path(project_dir).resolve()
 
     for pattern in target_patterns:
         for filepath in project_path.glob(pattern):
@@ -274,9 +283,32 @@ def main():
     if not args.api_key:
         print("✗ Error: OpenRouter API key required (--api-key or OPENROUTER_API_KEY)")
         sys.exit(1)
-    if not Path(args.project_dir).exists():
-        print(f"✗ Error: Project directory not found: {args.project_dir}")
+
+    # Security: Validate and resolve paths to prevent directory traversal
+    try:
+        project_dir = Path(args.project_dir).resolve()
+        output_path = Path(args.output).resolve()
+    except (ValueError, OSError) as e:
+        print(f"✗ Error: Invalid path: {e}")
         sys.exit(1)
+
+    # Security: Check for directory traversal attempts
+    if '..' in Path(args.project_dir).parts:
+        print("✗ Error: Invalid project directory - directory traversal detected")
+        sys.exit(1)
+
+    if '..' in Path(args.output).parts:
+        print("✗ Error: Invalid output path - directory traversal detected")
+        sys.exit(1)
+
+    # Check project directory exists
+    if not project_dir.exists():
+        print(f"✗ Error: Project directory not found: {project_dir}")
+        sys.exit(1)
+
+    # Update args with validated paths
+    args.project_dir = str(project_dir)
+    args.output = str(output_path)
 
     print("\n" + "="*60)
     print("C4 Level 1 Generator - System Context Analysis")

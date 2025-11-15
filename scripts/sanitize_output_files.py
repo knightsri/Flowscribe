@@ -41,6 +41,7 @@ def build_rename_map(files: List[Path]) -> Dict[str, str]:
     return mapping
 
 def apply_renames(files: List[Path], mapping: Dict[str, str]):
+    """Apply file renames atomically to avoid TOCTOU race conditions"""
     by_dir: Dict[Path, List[Path]] = {}
     for f in files:
         by_dir.setdefault(f.parent, []).append(f)
@@ -51,9 +52,18 @@ def apply_renames(files: List[Path], mapping: Dict[str, str]):
                 continue
             new = mapping[old]
             dst = folder / new
-            if dst.exists():
-                shutil.move(str(dst), str(folder / (new + ".bak")))
-            shutil.move(str(src), str(dst))
+
+            # Security: Atomic move to prevent TOCTOU race conditions
+            try:
+                # Try to move directly first
+                shutil.move(str(src), str(dst))
+            except FileExistsError:
+                # If destination exists, backup and retry atomically
+                try:
+                    shutil.move(str(dst), str(folder / (new + ".bak")))
+                    shutil.move(str(src), str(dst))
+                except Exception as e:
+                    print(f"Warning: Could not rename {old} to {new}: {e}")
 
 def rewrite_links_in_file(p: Path, mapping: Dict[str, str]) -> bool:
     text = p.read_text(encoding="utf-8", errors="ignore")

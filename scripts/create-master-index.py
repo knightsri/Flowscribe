@@ -596,6 +596,21 @@ def main():
     ap.add_argument("--output", "-o", required=True, help="Output README.md path")
     args = ap.parse_args()
 
+    # Security: Validate and resolve paths to prevent directory traversal
+    try:
+        output_path = Path(args.output).resolve()
+    except (ValueError, OSError) as e:
+        print(f"✗ Error: Invalid path: {e}")
+        raise SystemExit(1)
+
+    # Security: Check for directory traversal attempts
+    if '..' in Path(args.output).parts:
+        print("✗ Error: Invalid output path - directory traversal detected")
+        raise SystemExit(1)
+
+    # Update args with validated path
+    args.output = str(output_path)
+
     print("="*70)
     print("Master Index Generator")
     print("="*70)
@@ -604,7 +619,7 @@ def main():
 
     start = time.time()
     try:
-        out_dir = Path(args.output).parent
+        out_dir = output_path.parent
         md = generate_master_index(args.project, out_dir)
     except FileNotFoundError as e:
         print(f"✗ Error: {e}")

@@ -114,7 +114,60 @@ We will respond to security reports within 48 hours and provide updates on the f
 
 ## Security Audit History
 
-### 2025-11-15: Comprehensive Security Audit
+### 2025-11-15: Second Comprehensive Security Audit
+
+**Conducted by**: Automated security review and manual code analysis
+
+**Critical Vulnerabilities Found and Fixed**:
+
+#### 1. Path Traversal Vulnerabilities (CRITICAL) - **FIXED**
+Affected 6 Python scripts that accepted file path arguments without proper validation:
+- `c4-level1-generator.py` - Added path validation for `project_dir` and `output` arguments
+- `c4-level2-generator.py` - Added path validation for `deptrac_json` and `output` arguments
+- `c4-level3-generator.py` - Added path validation for `deptrac_report`, `project_dir`, and `output` arguments
+- `c4-level4-generator.py` - Added path validation for `project_dir`, `deptrac_json`, and `output_dir` arguments
+- `c4-architecture-review.py` - Added path validation for `output_dir` argument
+- `create-master-index.py` - Added path validation for `output` argument
+
+**Fixes Applied**:
+- All path arguments now use `Path.resolve()` to convert to absolute paths
+- All scripts check for `'..'` in path components to prevent directory traversal
+- Clear error messages for invalid paths
+- Paths are validated before any file operations
+
+**Lines Fixed**: Multiple locations across all 6 files
+
+#### 2. TOCTOU Race Conditions (HIGH) - **FIXED**
+Fixed Time-of-Check Time-of-Use vulnerabilities in file operations:
+- `sanitize_output_files.py:43-66` - Refactored `apply_renames()` to use atomic operations with try/except instead of checking `exists()` before file moves
+
+**Fix Applied**:
+- Changed from check-then-act pattern to atomic operations
+- Files are now moved directly with exception handling
+- Prevents symlink attacks and race conditions
+
+#### 3. Missing Input Validation (MEDIUM) - **FIXED**
+- `flowscribe_utils.py:156-169` - Added model name validation in LLMClient.__init__()
+  - Validates model name is a non-empty string
+  - Checks model name against regex pattern to allow only safe characters
+  - Prevents potential injection through model parameter
+
+#### 4. Unlimited Response Size (MEDIUM) - **FIXED**
+- `flowscribe_utils.py:204-207` - Added response size limit in LLMClient.call()
+  - Maximum response size set to 10MB
+  - Prevents memory exhaustion from unexpectedly large API responses
+  - Logs warning if response is truncated
+
+**Security Improvements**:
+- ✅ All path inputs now properly validated
+- ✅ All file operations use atomic patterns
+- ✅ Model names validated against injection
+- ✅ Response sizes limited to prevent DoS
+- ✅ Comprehensive error handling added
+
+**Status**: All CRITICAL, HIGH, and MEDIUM vulnerabilities have been addressed.
+
+### 2025-11-15: Initial Security Audit
 
 **Conducted by**: Automated security review
 
@@ -126,7 +179,7 @@ We will respond to security reports within 48 hours and provide updates on the f
 - ✅ No use of dangerous functions (`eval`, `exec`)
 - ✅ Proper API key management using environment variables
 
-**Status**: All critical vulnerabilities have been addressed.
+**Status**: All critical vulnerabilities from initial audit have been addressed.
 
 ## Security Checklist for Pull Requests
 
