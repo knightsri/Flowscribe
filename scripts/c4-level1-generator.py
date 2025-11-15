@@ -19,6 +19,7 @@ import json
 # Import shared utilities
 from flowscribe_utils import LLMClient, CostTracker, parse_llm_json, format_cost, format_duration
 from logger import setup_logger
+from constants import MAX_FILE_SIZE
 
 logger = setup_logger(__name__)
 
@@ -26,7 +27,7 @@ LEVEL_KEY = "level1"
 SCHEMA_VERSION = "1.0"
 
 
-def read_project_files(project_dir, max_file_size=50000):
+def read_project_files(project_dir, max_file_size=MAX_FILE_SIZE):
     """Read relevant project files for context analysis
 
     Args:
@@ -277,10 +278,9 @@ def main():
     parser.add_argument('project_dir', help='Path to the project directory')
     parser.add_argument('--project', required=True, help='Project name')
     parser.add_argument('--domain', required=True, help='Project domain')
-    parser.add_argument('--api-key', default=os.environ.get('OPENROUTER_API_KEY'), help='OpenRouter API key')
     parser.add_argument('--model', default=os.environ.get('OPENROUTER_MODEL', 'anthropic/claude-sonnet-4.5'), help='Model to use')
     parser.add_argument('--output', required=True, help='Output markdown file path')
-    parser.add_argument('--max-file-size', type=int, default=50000, help='Max file size to read')
+    parser.add_argument('--max-file-size', type=int, default=MAX_FILE_SIZE, help='Max file size to read')
     parser.add_argument('--debug', action='store_true', help='Enable debug logging')
     args = parser.parse_args()
 
@@ -288,8 +288,11 @@ def main():
         from logger import set_debug_mode
         set_debug_mode(logger, debug=True)
 
-    if not args.api_key:
-        logger.error("✗ Error: OpenRouter API key required (--api-key or OPENROUTER_API_KEY)")
+    # Get API key from environment only
+    api_key = os.environ.get('OPENROUTER_API_KEY')
+    if not api_key:
+        logger.error("✗ Error: OpenRouter API key required")
+        logger.error("Set OPENROUTER_API_KEY environment variable")
         sys.exit(1)
 
     # Security: Validate and resolve paths to prevent directory traversal
@@ -328,7 +331,7 @@ def main():
     logger.info(f"Output: {args.output}\n")
 
     tracker = CostTracker(args.model)
-    llm = LLMClient(args.api_key, args.model, tracker)
+    llm = LLMClient(api_key, args.model, tracker)
 
     # Step 1: Read project files
     logger.info("Step 1: Reading project files...")

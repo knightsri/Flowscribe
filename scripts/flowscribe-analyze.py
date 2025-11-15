@@ -611,10 +611,10 @@ Provide ONLY the JSON, no other text."""
             "--project", self.project_name,
             "--domain", self.project_domain,
             "--output-dir", str(self.output_dir),
-            "--api-key", self.api_key,
             "--model", review_model
         ]
-        
+
+        # Note: API key is passed via OPENROUTER_API_KEY environment variable
         return self.run_script("c4-architecture-review.py", args, "Architecture review")
 
     def run_script(self, script_name, args, step_name):
@@ -669,11 +669,11 @@ Provide ONLY the JSON, no other text."""
             str(self.project_dir),
             "--project", self.project_name,
             "--domain", self.project_domain,
-            "--api-key", self.api_key,
             "--model", self.model,
             "--output", str(self.output_dir / "c4-level1.md")
         ]
-        
+
+        # Note: API key is passed via OPENROUTER_API_KEY environment variable
         return self.run_script("c4-level1-generator.py", args, "Level 1 generation")
     
     def generate_level2(self):
@@ -705,12 +705,12 @@ Provide ONLY the JSON, no other text."""
             str(self.output_dir / "deptrac-report.json"),
             "--project", self.project_name,
             "--domain", self.project_domain,
-            "--api-key", self.api_key,
             "--model", self.model,
             "--output-dir", str(self.output_dir),
             "--max-components", "12"
         ]
-        
+
+        # Note: API key is passed via OPENROUTER_API_KEY environment variable
         return self.run_script("c4-level4-generator.py", args, "Level 4 generation")
     
     def generate_master_index(self):
@@ -970,25 +970,20 @@ Prerequisites:
         default='/workspace/output',
         help='Base output directory (default: /workspace/output)'
     )
-    
-    parser.add_argument(
-        '--api-key',
-        default=os.environ.get('OPENROUTER_API_KEY'),
-        help='OpenRouter API key (or set OPENROUTER_API_KEY env var)'
-    )
-    
+
     parser.add_argument(
         '--model',
         default=os.environ.get('OPENROUTER_MODEL', 'anthropic/claude-sonnet-4-20250514'),
         help='Model to use (default: claude-sonnet-4-20250514)'
     )
-    
+
     args = parser.parse_args()
-    
-    # Validate
-    if not args.api_key:
+
+    # Get API key from environment only
+    api_key = os.environ.get('OPENROUTER_API_KEY')
+    if not api_key:
         logger.error("✗ Error: OpenRouter API key required")
-        logger.error("Set OPENROUTER_API_KEY environment variable or use --api-key")
+        logger.error("Set OPENROUTER_API_KEY environment variable")
         sys.exit(1)
     
     # Create analyzer
@@ -996,7 +991,7 @@ Prerequisites:
         github_url=args.github_url,
         workspace_dir=args.workspace,
         output_base_dir=args.output,
-        api_key=args.api_key,
+        api_key=api_key,
         model=args.model
     )
     

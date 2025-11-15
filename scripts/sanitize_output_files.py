@@ -65,7 +65,7 @@ def apply_renames(files: List[Path], mapping: Dict[str, str]):
                 try:
                     shutil.move(str(dst), str(folder / (new + ".bak")))
                     shutil.move(str(src), str(dst))
-                except Exception as e:
+                except (IOError, OSError, PermissionError) as e:
                     logger.warning(f"Warning: Could not rename {old} to {new}: {e}")
 
 def rewrite_links_in_file(p: Path, mapping: Dict[str, str]) -> bool:
@@ -194,13 +194,21 @@ def ensure_front_matter_for_file(md_path: Path) -> bool:
     return True
 
 def ensure_front_matter(files: List[Path]) -> int:
+    """Ensure all markdown files have YAML front matter
+
+    Args:
+        files: List of markdown file paths
+
+    Returns:
+        Number of files that were modified
+    """
     changed = 0
     for md in files:
         try:
             if ensure_front_matter_for_file(md):
                 changed += 1
-        except Exception:
-            pass
+        except (IOError, OSError) as e:
+            logger.debug(f"Could not add front matter to {md}: {e}")
     return changed
 
 def sanitize_output_dir(output_dir: str, recursive: bool = True, to_div: bool = False) -> dict:

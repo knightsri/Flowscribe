@@ -14,6 +14,7 @@ from pathlib import Path
 from datetime import datetime
 import collections
 from logger import setup_logger
+from constants import MAX_VIOLATION_ROWS, MAX_FILES_PER_CELL
 
 logger = setup_logger(__name__)
 
@@ -129,7 +130,7 @@ class DeptracToC4Converter:
                 "line": v.get("line"),
             }
 
-    def _build_violation_summary(self, max_rows=100, max_files_per_cell=3):
+    def _build_violation_summary(self, max_rows=MAX_VIOLATION_ROWS, max_files_per_cell=MAX_FILES_PER_CELL):
         rows = list(self._iter_violations())
         by_pair = collections.Counter((r["from_layer"], r["to_layer"]) for r in rows)
         by_rule = collections.Counter(r["rule"] for r in rows)
@@ -174,7 +175,7 @@ class DeptracToC4Converter:
         }
         return summary
 
-    def _render_violation_section(self, outdir: Path, max_rows=100, max_files_per_cell=3) -> str:
+    def _render_violation_section(self, outdir: Path, max_rows=MAX_VIOLATION_ROWS, max_files_per_cell=MAX_FILES_PER_CELL) -> str:
         outdir.mkdir(parents=True, exist_ok=True)
         summary = self._build_violation_summary(max_rows, max_files_per_cell)
         self.violations_sidecar = summary["sidecar"]
@@ -237,7 +238,7 @@ class DeptracToC4Converter:
         # Optional: remove leading slashes
         return path_str.lstrip("/")
 
-    def generate_markdown_report(self, outdir: Path, max_rows=100, max_files_per_cell=3) -> str:
+    def generate_markdown_report(self, outdir: Path, max_rows=MAX_VIOLATION_ROWS, max_files_per_cell=MAX_FILES_PER_CELL) -> str:
         doc = []
         doc.append(f"# {self.project_name} - C4 Level 2: Container Architecture")
         doc.append("")
@@ -278,8 +279,8 @@ def main():
     parser.add_argument("--project", required=True, help='Project name (e.g., "WordPress")')
     parser.add_argument("--output", "-o", required=True, help="Markdown output path")
     parser.add_argument("--model", default="none", help="Model name for metrics (default: none, since no LLM used)")
-    parser.add_argument("--max-violations-table", type=int, default=100, help="Max rows in the violations table")
-    parser.add_argument("--max-files-per-cell", type=int, default=3, help="Max file samples per table cell")
+    parser.add_argument("--max-violations-table", type=int, default=MAX_VIOLATION_ROWS, help="Max rows in the violations table")
+    parser.add_argument("--max-files-per-cell", type=int, default=MAX_FILES_PER_CELL, help="Max file samples per table cell")
     parser.add_argument('--debug', action='store_true', help='Enable debug logging')
     args = parser.parse_args()
 

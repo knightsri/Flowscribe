@@ -11,9 +11,19 @@ Provides common functionality for all Flowscribe scripts:
 import os
 import json
 import time
+import re
+import hashlib
 from datetime import datetime
+from typing import Optional, Dict, Any, List
 import requests
 from logger import setup_logger
+from constants import (
+    MAX_RESPONSE_SIZE,
+    DEFAULT_API_TIMEOUT,
+    DEFAULT_MODEL,
+    DEFAULT_INPUT_COST,
+    DEFAULT_OUTPUT_COST
+)
 
 # Setup module logger
 logger = setup_logger(__name__)
@@ -21,8 +31,8 @@ logger = setup_logger(__name__)
 
 class CostTracker:
     """Track costs and time for LLM operations"""
-    
-    def __init__(self, model):
+
+    def __init__(self, model: str) -> None:
         self.model = model
         self.pricing = self._get_model_pricing(model)
         self.total_cost = 0.0
@@ -30,9 +40,9 @@ class CostTracker:
         self.total_input_tokens = 0
         self.total_output_tokens = 0
         self.total_tokens = 0
-        self.calls = []
-        
-    def _get_model_pricing(self, model):
+        self.calls: List[Dict[str, Any]] = []
+
+    def _get_model_pricing(self, model: str) -> Dict[str, Any]:
         """Get pricing for model from environment or built-in database"""
         
         # Check for environment variable overrides first
@@ -75,21 +85,28 @@ class CostTracker:
         
         # Default pricing for unknown models
         logger.warning(f"Unknown model pricing for '{model}'")
-        logger.warning(f"Using default: $3/$15 per 1M tokens")
+        logger.warning(f"Using default: ${DEFAULT_INPUT_COST}/${DEFAULT_OUTPUT_COST} per 1M tokens")
         logger.warning(f"Set OPENROUTER_MODEL_INPUT_COST_PER_1M and OPENROUTER_MODEL_OUTPUT_COST_PER_1M to override")
         return {
-            'input': 3.0,
-            'output': 15.0,
+            'input': DEFAULT_INPUT_COST,
+            'output': DEFAULT_OUTPUT_COST,
             'source': 'default'
         }
     
-    def calculate_cost(self, input_tokens, output_tokens):
+    def calculate_cost(self, input_tokens: int, output_tokens: int) -> float:
         """Calculate cost based on token usage"""
         input_cost = (input_tokens / 1_000_000) * self.pricing['input']
         output_cost = (output_tokens / 1_000_000) * self.pricing['output']
         return input_cost + output_cost
-    
-    def record_call(self, input_tokens, output_tokens, duration, cost_override=None, meta=None):
+
+    def record_call(
+        self,
+        input_tokens: int,
+        output_tokens: int,
+        duration: float,
+        cost_override: Optional[float] = None,
+        meta: Optional[Dict[str, Any]] = None
+    ) -> None:
         """Record an API call"""
         cost = float(cost_override) if cost_override is not None else self.calculate_cost(input_tokens, output_tokens)
         
@@ -110,7 +127,7 @@ class CostTracker:
             entry.update(meta)
         self.calls.append(entry)
     
-    def get_summary(self):
+    def get_summary(self) -> Dict[str, Any]:
         """Get cost summary"""
         return {
             'total_cost': self.total_cost,
@@ -127,7 +144,7 @@ class CostTracker:
             }
         }
     
-    def print_summary(self, prefix=""):
+    def print_summary(self, prefix: str = "") -> None:
         """Print formatted summary"""
         summary = self.get_summary()
 
@@ -141,23 +158,29 @@ class CostTracker:
         logger.info(f"{prefix}  Total Tokens:  {summary['total_tokens']:,}")
         logger.info(f"{prefix}  API Calls:     {summary['num_calls']}")
     
-    def save_to_file(self, filepath):
+    def save_to_file(self, filepath: str) -> None:
         """Save metrics to JSON file"""
         summary = self.get_summary()
         summary['calls'] = self.calls
         summary['generated_at'] = datetime.now().isoformat()
-        
-        with open(filepath, 'w') as f:
-            json.dump(summary, f, indent=2)
+
+        try:
+            with open(filepath, 'w', encoding='utf-8') as f:
+                json.dump(summary, f, indent=2)
+        except (IOError, OSError) as e:
+            logger.error(f"Failed to save metrics to {filepath}: {e}")
+            raise
 
 
 class LLMClient:
     """OpenRouter API client with cost tracking"""
 
-    # Security: Maximum response size to prevent memory exhaustion
-    MAX_RESPONSE_SIZE = 10_000_000  # 10MB
-
-    def __init__(self, api_key, model, tracker=None):
+    def __init__(
+        self,
+        api_key: str,
+        model: str,
+        tracker: Optional[CostTracker] = None
+    ) -> None:
         self.api_key = api_key
 
         # Security: Validate model name format to prevent injection
@@ -165,15 +188,18 @@ class LLMClient:
             raise ValueError("Model must be a non-empty string")
 
         # Allow alphanumeric, hyphens, slashes, dots, and underscores in model names
-        import re
         if not re.match(r'^[a-zA-Z0-9._/-]+$', model):
             raise ValueError(f"Invalid model name format: {model}")
 
         self.model = model
         self.tracker = tracker or CostTracker(model)
-    
-    
-    def call(self, prompt, timeout=180):
+
+
+    def call(
+        self,
+        prompt: str,
+        timeout: int = DEFAULT_API_TIMEOUT
+    ) -> Optional[Dict[str, Any]]:
         """Call OpenRouter API and track costs (usage-first)."""
         url = "https://openrouter.ai/api/v1/chat/completions"
         
@@ -206,9 +232,9 @@ class LLMClient:
             content = result.get('choices', [{}])[0].get('message', {}).get('content', '')
 
             # Security: Limit response size to prevent memory exhaustion
-            if len(content) > self.MAX_RESPONSE_SIZE:
-                logger.warning(f"Response truncated (exceeded {self.MAX_RESPONSE_SIZE:,} chars)")
-                content = content[:self.MAX_RESPONSE_SIZE]
+            if len(content) > MAX_RESPONSE_SIZE:
+                logger.warning(f"Response truncated (exceeded {MAX_RESPONSE_SIZE:,} chars)")
+                content = content[:MAX_RESPONSE_SIZE]
 
             usage = result.get('usage', {}) or {}
             input_tokens = int(usage.get('prompt_tokens', 0) or 0)
@@ -258,45 +284,73 @@ class LLMClient:
 
 
 
-def parse_llm_json(response_text):
-    """Parse JSON from LLM response, handling markdown code blocks"""
+def parse_llm_json(response_text: str) -> Optional[Dict[str, Any]]:
+    """Parse JSON from LLM response, handling markdown code blocks
+
+    Args:
+        response_text: Raw LLM response text possibly containing JSON
+
+    Returns:
+        Parsed JSON as dictionary, or None if parsing fails
+    """
+    if not response_text:
+        logger.warning("Empty response text provided to parse_llm_json")
+        return None
+
     cleaned = response_text.strip()
-    
+
     # Remove markdown code blocks
     if cleaned.startswith('```json'):
         cleaned = cleaned[7:]
     elif cleaned.startswith('```'):
         cleaned = cleaned[3:]
-    
+
     if cleaned.endswith('```'):
         cleaned = cleaned[:-3]
-    
+
     cleaned = cleaned.strip()
-    
+
     try:
         return json.loads(cleaned)
     except json.JSONDecodeError as e:
         logger.error(f"Failed to parse JSON: {e}")
         logger.debug(f"Response text:\n{response_text[:500]}")
         return None
+    except (TypeError, ValueError) as e:
+        logger.error(f"Unexpected error parsing JSON: {e}")
+        return None
 
 
-def get_api_config():
-    """Get API configuration from environment"""
+def get_api_config() -> tuple[str, str]:
+    """Get API configuration from environment
+
+    Returns:
+        Tuple of (api_key, model)
+
+    Raises:
+        ValueError: If OPENROUTER_API_KEY is not set
+    """
     api_key = os.environ.get('OPENROUTER_API_KEY')
-    model = os.environ.get('OPENROUTER_MODEL', 'anthropic/claude-sonnet-4-20250514')
-    
+    model = os.environ.get('OPENROUTER_MODEL', DEFAULT_MODEL)
+
     if not api_key:
         raise ValueError(
             "OPENROUTER_API_KEY not set. "
             "Set it in .env file or environment."
         )
-    
+
     return api_key, model
 
 
-def format_cost(cost):
-    """Format cost for display"""
+def format_cost(cost: float) -> str:
+    """Format cost for display
+
+    Args:
+        cost: Cost in USD
+
+    Returns:
+        Formatted cost string
+    """
     if cost < 0.0001:
         return f"${cost:.6f}"
     elif cost < 0.01:
@@ -305,8 +359,15 @@ def format_cost(cost):
         return f"${cost:.4f}"
 
 
-def format_duration(seconds):
-    """Format duration for display"""
+def format_duration(seconds: float) -> str:
+    """Format duration for display
+
+    Args:
+        seconds: Duration in seconds
+
+    Returns:
+        Formatted duration string (e.g., "1.5m", "2.3h")
+    """
     if seconds < 60:
         return f"{seconds:.1f}s"
     elif seconds < 3600:
@@ -320,8 +381,6 @@ def format_duration(seconds):
 # -----------------------------
 # Mermaid ID sanitization utils
 # -----------------------------
-import re as _re
-import hashlib as _hashlib
 
 def mermaid_safe_id(name: str) -> str:
     """

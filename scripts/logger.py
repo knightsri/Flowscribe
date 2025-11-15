@@ -8,7 +8,7 @@ import logging
 import sys
 
 
-def setup_logger(name, level=logging.INFO):
+def setup_logger(name: str, level: int = logging.INFO) -> logging.Logger:
     """
     Setup structured logger for Flowscribe scripts.
 
@@ -41,7 +41,7 @@ def setup_logger(name, level=logging.INFO):
     return logger
 
 
-def set_debug_mode(logger, debug=True):
+def set_debug_mode(logger: logging.Logger, debug: bool = True) -> None:
     """
     Enable or disable debug mode for a logger.
 

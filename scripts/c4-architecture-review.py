@@ -8,11 +8,13 @@ C4 Architecture Review Generator (Metrics v1.0)
 - Source of truth for cost: OpenRouter `usage.cost` (if available); otherwise falls back to provided cost.
 
 Usage:
+    # Set API key via environment variable
+    export OPENROUTER_API_KEY=<your-key>
+
     python3 c4-architecture-review.py \
         --project "WordPress" \
         --domain "content management" \
         --output-dir /workspace/output/WordPress \
-        --api-key <key> \
         --model anthropic/claude-sonnet-4-5-20241022
 """
 
@@ -355,7 +357,6 @@ def main():
     parser.add_argument('--project', required=True, help='Project name')
     parser.add_argument('--domain', required=True, help='Project domain')
     parser.add_argument('--output-dir', required=True, help='Output directory with C4 docs')
-    parser.add_argument('--api-key', required=True, help='OpenRouter API key')
     parser.add_argument(
         '--model',
         default='anthropic/claude-sonnet-4.5',
@@ -367,6 +368,13 @@ def main():
     if args.debug:
         from logger import set_debug_mode
         set_debug_mode(logger, debug=True)
+
+    # Get API key from environment only
+    api_key = os.environ.get('OPENROUTER_API_KEY')
+    if not api_key:
+        logger.error("✗ Error: OpenRouter API key required")
+        logger.error("Set OPENROUTER_API_KEY environment variable")
+        return 1
 
     # Security: Validate and resolve paths to prevent directory traversal
     try:
@@ -393,7 +401,7 @@ def main():
         args.project,
         args.domain,
         args.output_dir,
-        args.api_key,
+        api_key,
         args.model
     )
     if metrics:

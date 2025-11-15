@@ -602,38 +602,33 @@ def main():
         required=True,
         help='Project domain (e.g., "scholarly publishing")'
     )
-    
-    parser.add_argument(
-        '--api-key',
-        default=os.environ.get('OPENROUTER_API_KEY'),
-        help='OpenRouter API key'
-    )
-    
+
     parser.add_argument(
         '--model',
         default=os.environ.get('OPENROUTER_MODEL', 'anthropic/claude-sonnet-4-20250514'),
         help='Model to use'
     )
-    
+
     parser.add_argument(
         '--output-dir',
         required=True,
         help='Output directory for generated documentation'
     )
-    
+
     parser.add_argument(
         '--max-components',
         type=int,
         default=12,
         help='Maximum number of components to document (default: 12)'
     )
-    
+
     args = parser.parse_args()
 
-    # Validate API key
-    if not args.api_key:
+    # Get API key from environment only
+    api_key = os.environ.get('OPENROUTER_API_KEY')
+    if not api_key:
         logger.error("✗ Error: OpenRouter API key required")
-        logger.error("Set OPENROUTER_API_KEY environment variable or use --api-key")
+        logger.error("Set OPENROUTER_API_KEY environment variable")
         return 1
 
     # Security: Validate and resolve paths to prevent directory traversal
@@ -682,7 +677,7 @@ def main():
     
     # Initialize cost tracker and LLM client
     tracker = CostTracker(args.model)
-    llm = LLMClient(args.api_key, args.model, tracker)
+    llm = LLMClient(api_key, args.model, tracker)
     
     # Create output directory
     output_dir = Path(args.output_dir)

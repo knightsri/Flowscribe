@@ -627,7 +627,7 @@ def main():
     except FileNotFoundError as e:
         logger.error(f"✗ Error: {e}")
         logger.error("\nEnsure architecture-review.md exists before generating master index.")
-        logger.error("Run: python3 c4-architecture-review.py --project <name> --domain <domain> --output-dir <dir> --api-key <key>")
+        logger.error("Run: export OPENROUTER_API_KEY=<key> && python3 c4-architecture-review.py --project <name> --domain <domain> --output-dir <dir>")
         raise SystemExit(1)
     except Exception as e:
         logger.error(f"✗ Error generating master index: {e}")
