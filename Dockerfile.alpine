@@ -1,0 +1,84 @@
+# Alpine Linux base image for smaller container size
+# Trade-off: Smaller size (~100MB vs 500MB+) but may need to rebuild some packages
+FROM alpine:3.19
+
+# Install base dependencies
+RUN apk add --no-cache \
+    git \
+    curl \
+    unzip \
+    wget \
+    vim \
+    tree \
+    graphviz \
+    bash \
+    # Python and pip
+    python3 \
+    py3-pip \
+    # PHP and Composer
+    php82 \
+    php82-cli \
+    php82-mbstring \
+    php82-xml \
+    php82-phar \
+    php82-openssl \
+    php82-json \
+    php82-curl \
+    php82-dom \
+    php82-tokenizer \
+    composer \
+    # Build dependencies for Python packages
+    gcc \
+    g++ \
+    musl-dev \
+    python3-dev \
+    libffi-dev \
+    openssl-dev \
+    cargo
+
+# Install Node.js and npm (Alpine package)
+RUN apk add --no-cache nodejs npm
+
+# Create symlink for python (Alpine uses python3)
+RUN ln -sf /usr/bin/python3 /usr/bin/python
+
+# Install Python analysis tools
+RUN pip3 install --no-cache-dir --break-system-packages \
+    pyan3 \
+    pylint \
+    networkx \
+    matplotlib \
+    pyyaml \
+    requests \
+    pydeps
+
+# Install JavaScript analysis tools (pinned versions)
+RUN npm install -g \
+    madge@6.1.0 \
+    dependency-cruiser@15.5.0 \
+    jsdoc@4.0.2
+
+# Install PHP analysis tools (including Deptrac and Structurizr)
+RUN composer global require \
+    phpstan/phpstan \
+    squizlabs/php_codesniffer \
+    qossmic/deptrac-shim \
+    structurizr-php/structurizr-php
+
+# Add composer global bin to PATH
+ENV PATH="/root/.composer/vendor/bin:${PATH}"
+
+# Install Mermaid CLI (pinned version)
+RUN npm install -g @mermaid-js/mermaid-cli@10.6.1
+
+# Clean up build dependencies to reduce image size
+RUN apk del gcc g++ musl-dev python3-dev libffi-dev cargo
+
+# Set working directory
+WORKDIR /workspace
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+    CMD python3 -c "import sys; sys.exit(0)" || exit 1
+
+CMD ["/bin/bash"]
